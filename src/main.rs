@@ -3,6 +3,8 @@ use serenity::model::{channel::Message, gateway::Ready};
 use serenity::model::application::interaction::Interaction;
 use serenity::model::application::command::CommandOptionType;
 use serenity::model::application::command::CommandType;
+use serenity::model::application::component::ActionRowComponent;
+use serenity::model::application::component::InputTextStyle;
 use serenity::prelude::*;
 use sqlx::PgPool;
 use futures::StreamExt;
@@ -179,17 +181,21 @@ impl EventHandler for Handler {
                     },
                     "Register as Response" => {
                         if let Some(guild_id) = guild_id {
+                            println!("Processing Register as Response command");
                             // メッセージコンテキストメニューからの場合
-                            if let Some(messages) = &cmd.data.resolved.messages {
-                                if let Some((_, message)) = messages.iter().next() {
+                            if !cmd.data.resolved.messages.is_empty() {
+                                println!("Found {} messages", cmd.data.resolved.messages.len());
+                                if let Some((_, message)) = cmd.data.resolved.messages.iter().next() {
+                                    println!("Processing message: {}", message.content);
                                     let message_content = &message.content;
-                                    // メッセージ内容をbase64エンコードしてcustom_idに含める
-                                    let encoded_content = base64::encode(message_content.as_bytes());
-                                    let custom_id = format!("register_response_modal:{}", encoded_content);
+                                    println!("Processing message: {}", message_content);
+                                    // メッセージIDをcustom_idに使用
+                                    let custom_id = format!("reg_resp:{}", message.id.0);
                                     
                                     // モーダルでコマンド名を入力してもらう
-                                    let _ = cmd.create_interaction_response(&ctx.http, |response| {
-                                        response.kind(serenity::model::prelude::InteractionResponseType::Modal)
+                                    match cmd.create_interaction_response(&ctx.http, |response| {
+                                        response
+                                            .kind(serenity::model::prelude::InteractionResponseType::Modal)
                                             .interaction_response_data(|data| {
                                                 data.custom_id(&custom_id)
                                                     .title("コマンド名を入力")
@@ -202,12 +208,32 @@ impl EventHandler for Handler {
                                                                     .placeholder("例: hello")
                                                                     .required(true)
                                                                     .max_length(50)
+                                                                    .style(InputTextStyle::Short)
                                                             })
                                                         })
                                                     })
                                             })
+                                    }).await {
+                                        Ok(_) => println!("Modal created successfully"),
+                                        Err(e) => println!("Failed to create modal: {:?}", e),
+                                    }
+                                } else {
+                                    let _ = cmd.create_interaction_response(&ctx.http, |response| {
+                                        response
+                                            .kind(serenity::model::prelude::InteractionResponseType::ChannelMessageWithSource)
+                                            .interaction_response_data(|message| {
+                                                message.content("メッセージが見つかりませんでした。")
+                                            })
                                     }).await;
                                 }
+                            } else {
+                                let _ = cmd.create_interaction_response(&ctx.http, |response| {
+                                    response
+                                        .kind(serenity::model::prelude::InteractionResponseType::ChannelMessageWithSource)
+                                        .interaction_response_data(|message| {
+                                            message.content("メッセージが見つかりませんでした。")
+                                        })
+                                }).await;
                             }
                         }
                     },
@@ -215,32 +241,39 @@ impl EventHandler for Handler {
                 }
             },
             Interaction::ModalSubmit(modal) => {
-                if modal.data.custom_id.starts_with("register_response_modal:") {
+                if modal.data.custom_id.starts_with("reg_resp:") {
                     if let Some(guild_id) = modal.guild_id.map(|g| g.0 as i64) {
-                        // custom_idからメッセージ内容を復元
-                        let encoded_content = &modal.data.custom_id[24..]; // "register_response_modal:"の後
-                        if let Ok(decoded_bytes) = base64::decode(encoded_content) {
-                            if let Ok(message_content) = String::from_utf8(decoded_bytes) {
+                        // custom_idからメッセージIDを取得
+                        let message_id_str = &modal.data.custom_id[9..]; // "reg_resp:"の後
+                        if let Ok(message_id) = message_id_str.parse::<u64>() {
+                            let message_id = serenity::model::id::MessageId(message_id);
+                            // メッセージを再取得
+                            if let Ok(message) = modal.channel_id.message(&ctx.http, message_id).await {
                                 if let Some(action_row) = modal.data.components.get(0) {
                                     if let Some(component) = action_row.components.get(0) {
-                                        if let serenity::model::prelude::ActionRowComponent::InputText(input) = component {
-                                            if let Some(command_name) = &input.value {
-                                                // メッセージ内容をコマンドの返答として登録
-                                                let ok = commands::add_command(&self.pool, guild_id, command_name, &message_content).await;
-                                                let reply = if ok {
-                                                    format!("メッセージの内容をコマンド '{}' の返答として登録しました！", command_name)
-                                                } else {
-                                                    "登録に失敗しました。同じ名前のコマンドが既に存在するかもしれません。".to_string()
-                                                };
-                                                let _ = modal.create_interaction_response(&ctx.http, |r| {
-                                                    r.interaction_response_data(|d| {
-                                                        d.content(reply)
-                                                    })
-                                                }).await;
-                                            }
+                                        if let ActionRowComponent::InputText(input) = component {
+                                            let command_name = &input.value;
+                                            // メッセージ内容をコマンドの返答として登録
+                                            let ok = commands::add_command(&self.pool, guild_id, command_name, &message.content).await;
+                                            let reply = if ok {
+                                                format!("メッセージの内容をコマンド '{}' の返答として登録しました！", command_name)
+                                            } else {
+                                                "登録に失敗しました。同じ名前のコマンドが既に存在するかもしれません。".to_string()
+                                            };
+                                            let _ = modal.create_interaction_response(&ctx.http, |r| {
+                                                r.interaction_response_data(|d| {
+                                                    d.content(reply)
+                                                })
+                                            }).await;
                                         }
                                     }
                                 }
+                            } else {
+                                let _ = modal.create_interaction_response(&ctx.http, |r| {
+                                    r.interaction_response_data(|d| {
+                                        d.content("メッセージの取得に失敗しました。")
+                                    })
+                                }).await;
                             }
                         }
                     }
