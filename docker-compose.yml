@@ -4,3 +4,4 @@ services:
     container_name: nkmzbot
     env_file:
       - .env
+    restart: always
