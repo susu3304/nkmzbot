@@ -179,7 +179,18 @@ async fn main() {
     dotenvy::dotenv().ok();
     let token = std::env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
     let database_url = std::env::var("DATABASE_URL").expect("Expected a database url in the environment");
+    
+    // DB接続とマイグレーション実行
     let pool = PgPool::connect(&database_url).await.expect("DB接続失敗");
+    
+    // マイグレーション実行
+    println!("Running database migrations...");
+    if let Err(e) = sqlx::migrate!("./migrations").run(&pool).await {
+        eprintln!("Migration failed: {}", e);
+        std::process::exit(1);
+    }
+    println!("Migrations completed successfully!");
+    
     let handler = Handler { pool: Arc::new(pool) };
     let intents = GatewayIntents::all();
     let mut client = Client::builder(&token, intents)
