@@ -180,14 +180,18 @@ impl EventHandler for Handler {
                     "Register as Response" => {
                         if let Some(guild_id) = guild_id {
                             // メッセージコンテキストメニューからの場合
-                            if let Some(resolved) = &cmd.data.resolved {
-                                if let Some(messages) = &resolved.messages {
-                                    if let Some((_, message)) = messages.iter().next() {
-                                        let message_content = &message.content;
-                                        // モーダルでコマンド名を入力してもらう
-                                        let _ = cmd.create_interaction_response(&ctx.http, |response| {
-                                            response.interaction_response_data(|data| {
-                                                data.custom_id("register_response_modal")
+                            if let Some(messages) = &cmd.data.resolved.messages {
+                                if let Some((_, message)) = messages.iter().next() {
+                                    let message_content = &message.content;
+                                    // メッセージ内容をbase64エンコードしてcustom_idに含める
+                                    let encoded_content = base64::encode(message_content.as_bytes());
+                                    let custom_id = format!("register_response_modal:{}", encoded_content);
+                                    
+                                    // モーダルでコマンド名を入力してもらう
+                                    let _ = cmd.create_interaction_response(&ctx.http, |response| {
+                                        response.kind(serenity::model::prelude::InteractionResponseType::Modal)
+                                            .interaction_response_data(|data| {
+                                                data.custom_id(&custom_id)
                                                     .title("コマンド名を入力")
                                                     .components(|components| {
                                                         components.create_action_row(|row| {
@@ -201,12 +205,8 @@ impl EventHandler for Handler {
                                                             })
                                                         })
                                                     })
-                                            }).kind(serenity::model::prelude::InteractionResponseType::Modal)
-                                        }).await;
-                                        
-                                        // メッセージ内容を一時保存（実際の実装では別の方法が必要）
-                                        // 今回は簡易的にコマンド名を入力後に処理
-                                    }
+                                            })
+                                    }).await;
                                 }
                             }
                         }
@@ -215,18 +215,32 @@ impl EventHandler for Handler {
                 }
             },
             Interaction::ModalSubmit(modal) => {
-                if modal.data.custom_id == "register_response_modal" {
+                if modal.data.custom_id.starts_with("register_response_modal:") {
                     if let Some(guild_id) = modal.guild_id.map(|g| g.0 as i64) {
-                        if let Some(command_name_input) = modal.data.components.get(0)
-                            .and_then(|row| row.components.get(0)) {
-                            if let Some(command_name) = &command_name_input.value {
-                                // ここで元のメッセージ内容を取得する必要があります
-                                // 実際の実装では、メッセージIDを保存してから取得する方法が必要
-                                let _ = modal.create_interaction_response(&ctx.http, |r| {
-                                    r.interaction_response_data(|d| {
-                                        d.content("メッセージをコマンドの返答として登録する機能は開発中です。")
-                                    })
-                                }).await;
+                        // custom_idからメッセージ内容を復元
+                        let encoded_content = &modal.data.custom_id[24..]; // "register_response_modal:"の後
+                        if let Ok(decoded_bytes) = base64::decode(encoded_content) {
+                            if let Ok(message_content) = String::from_utf8(decoded_bytes) {
+                                if let Some(action_row) = modal.data.components.get(0) {
+                                    if let Some(component) = action_row.components.get(0) {
+                                        if let serenity::model::prelude::ActionRowComponent::InputText(input) = component {
+                                            if let Some(command_name) = &input.value {
+                                                // メッセージ内容をコマンドの返答として登録
+                                                let ok = commands::add_command(&self.pool, guild_id, command_name, &message_content).await;
+                                                let reply = if ok {
+                                                    format!("メッセージの内容をコマンド '{}' の返答として登録しました！", command_name)
+                                                } else {
+                                                    "登録に失敗しました。同じ名前のコマンドが既に存在するかもしれません。".to_string()
+                                                };
+                                                let _ = modal.create_interaction_response(&ctx.http, |r| {
+                                                    r.interaction_response_data(|d| {
+                                                        d.content(reply)
+                                                    })
+                                                }).await;
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
