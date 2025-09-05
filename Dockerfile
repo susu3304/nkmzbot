@@ -1,5 +1,5 @@
-# Rust公式イメージを使用
-FROM rust:latest
+# Rust公式slimイメージを使用
+FROM rust:slim
 
 # 作業ディレクトリを作成
 WORKDIR /app

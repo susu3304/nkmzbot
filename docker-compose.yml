@@ -4,6 +4,5 @@ services:
   nkmzbot:
     build: .
     container_name: nkmzbot
-    environment:
-      - RUST_LOG=info
-      - DISCORD_TOKEN=your_discord_token_here
+    env_file:
+      - .env
