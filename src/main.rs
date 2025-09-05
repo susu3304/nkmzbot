@@ -253,8 +253,25 @@ impl EventHandler for Handler {
                                     if let Some(component) = action_row.components.get(0) {
                                         if let ActionRowComponent::InputText(input) = component {
                                             let command_name = &input.value;
+                                            
+                                            // メッセージ内容を構築（添付ファイルがある場合はURLを追加）
+                                            let mut response_content = message.content.clone();
+                                            
+                                            // 添付ファイルがある場合はURLを追加
+                                            if !message.attachments.is_empty() {
+                                                for attachment in &message.attachments {
+                                                    // すべての添付ファイルを追加（画像のみにしたい場合は下の行のコメントアウトを外す）
+                                                    // if attachment.content_type.as_ref().map_or(false, |ct| ct.starts_with("image/")) {
+                                                        if !response_content.is_empty() {
+                                                            response_content.push('\n');
+                                                        }
+                                                        response_content.push_str(&attachment.url);
+                                                    // }
+                                                }
+                                            }
+                                            
                                             // メッセージ内容をコマンドの返答として登録
-                                            let ok = commands::add_command(&self.pool, guild_id, command_name, &message.content).await;
+                                            let ok = commands::add_command(&self.pool, guild_id, command_name, &response_content).await;
                                             let reply = if ok {
                                                 format!("メッセージの内容をコマンド '{}' の返答として登録しました！", command_name)
                                             } else {
