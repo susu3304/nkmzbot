@@ -5,6 +5,8 @@ use serenity::model::application::command::CommandOptionType;
 use serenity::model::application::command::CommandType;
 use serenity::model::application::component::ActionRowComponent;
 use serenity::model::application::component::InputTextStyle;
+use serenity::model::guild::Guild;
+use serenity::model::id::GuildId;
 use serenity::prelude::*;
 use sqlx::PgPool;
 use futures::StreamExt;
@@ -15,85 +17,102 @@ struct Handler {
     pool: Arc<PgPool>,
 }
 
+async fn register_guild_commands(ctx: &Context, guild_id: GuildId) {
+    // ギルド内のアプリケーションコマンドを「置き換え」る（重複防止）
+    if let Err(e) = guild_id
+        .set_application_commands(&ctx.http, |commands| {
+            commands
+                .create_application_command(|command| {
+                    command
+                        .name("add")
+                        .description("新しいコマンドを追加します")
+                        .dm_permission(false)
+                        .create_option(|option| {
+                            option
+                                .name("name")
+                                .description("コマンド名")
+                                .kind(CommandOptionType::String)
+                                .required(true)
+                        })
+                        .create_option(|option| {
+                            option
+                                .name("response")
+                                .description("返答内容")
+                                .kind(CommandOptionType::String)
+                                .required(true)
+                        })
+                })
+                .create_application_command(|command| {
+                    command
+                        .name("remove")
+                        .description("コマンドを削除します")
+                        .dm_permission(false)
+                        .create_option(|option| {
+                            option
+                                .name("name")
+                                .description("削除するコマンド名")
+                                .kind(CommandOptionType::String)
+                                .required(true)
+                        })
+                })
+                .create_application_command(|command| {
+                    command
+                        .name("update")
+                        .description("コマンドを更新します")
+                        .dm_permission(false)
+                        .create_option(|option| {
+                            option
+                                .name("name")
+                                .description("更新するコマンド名")
+                                .kind(CommandOptionType::String)
+                                .required(true)
+                        })
+                        .create_option(|option| {
+                            option
+                                .name("response")
+                                .description("新しい返答内容")
+                                .kind(CommandOptionType::String)
+                                .required(true)
+                        })
+                })
+                .create_application_command(|command| {
+                    command
+                        .name("list")
+                        .description("登録されているコマンド一覧を表示します")
+                        .dm_permission(false)
+                })
+                .create_application_command(|command| {
+                    command
+                        .name("Register as Response")
+                        .kind(CommandType::Message)
+                })
+        })
+        .await
+    {
+        eprintln!(
+            "Failed to register application commands for guild {}: {:?}",
+            guild_id.0, e
+        );
+    } else {
+        println!("Registered application commands for guild {}", guild_id.0);
+    }
+}
+
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
         
-        // 全てのギルドにスラッシュコマンドを登録
+        // 既存の全ギルドにスラッシュコマンドを登録（重複防止のため置換）
         for guild in ready.guilds {
-            let guild_id = guild.id;
-            
-            // addコマンド
-            let _ = guild_id.create_application_command(&ctx.http, |command| {
-                command
-                    .name("add")
-                    .description("新しいコマンドを追加します")
-                    .create_option(|option| {
-                        option
-                            .name("name")
-                            .description("コマンド名")
-                            .kind(CommandOptionType::String)
-                            .required(true)
-                    })
-                    .create_option(|option| {
-                        option
-                            .name("response")
-                            .description("返答内容")
-                            .kind(CommandOptionType::String)
-                            .required(true)
-                    })
-            }).await;
-            
-            // removeコマンド
-            let _ = guild_id.create_application_command(&ctx.http, |command| {
-                command
-                    .name("remove")
-                    .description("コマンドを削除します")
-                    .create_option(|option| {
-                        option
-                            .name("name")
-                            .description("削除するコマンド名")
-                            .kind(CommandOptionType::String)
-                            .required(true)
-                    })
-            }).await;
-            
-            // updateコマンド
-            let _ = guild_id.create_application_command(&ctx.http, |command| {
-                command
-                    .name("update")
-                    .description("コマンドを更新します")
-                    .create_option(|option| {
-                        option
-                            .name("name")
-                            .description("更新するコマンド名")
-                            .kind(CommandOptionType::String)
-                            .required(true)
-                    })
-                    .create_option(|option| {
-                        option
-                            .name("response")
-                            .description("新しい返答内容")
-                            .kind(CommandOptionType::String)
-                            .required(true)
-                    })
-            }).await;
-            
-            // listコマンド
-            let _ = guild_id.create_application_command(&ctx.http, |command| {
-                command
-                    .name("list")
-                    .description("登録されているコマンド一覧を表示します")
-            }).await;
-            
-            // メッセージコンテキストメニュー: メッセージを返答として登録
-            let _ = guild_id.create_application_command(&ctx.http, |command| {
-                command
-                    .name("Register as Response")
-                    .kind(CommandType::Message)
-            }).await;
+            register_guild_commands(&ctx, guild.id).await;
         }
+    }
+
+    async fn guild_create(&self, ctx: Context, guild: Guild) {
+        // ギルドが作成/利用可能になったら、コマンドを確実に登録
+        println!("Guild available/joined: {} (id={}) — ensuring commands", guild.name, guild.id.0);
+        register_guild_commands(&ctx, guild.id).await;
     }
 
     async fn message(&self, ctx: Context, msg: Message) {
