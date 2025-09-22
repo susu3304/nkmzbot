@@ -11,6 +11,10 @@ use serenity::prelude::*;
 use sqlx::PgPool;
 use futures::StreamExt;
 use std::sync::Arc;
+use axum::Router;
+use axum_extra::extract::cookie::{Cookie, SameSite};
+use tokio::task::JoinSet;
+mod web;
 mod commands;
 
 struct Handler {
@@ -325,6 +329,11 @@ async fn main() {
     dotenvy::dotenv().ok();
     let token = std::env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
     let database_url = std::env::var("DATABASE_URL").expect("Expected a database url in the environment");
+    let web_bind = std::env::var("WEB_BIND").unwrap_or_else(|_| "0.0.0.0:3000".to_string());
+    let discord_client_id = std::env::var("DISCORD_CLIENT_ID").expect("DISCORD_CLIENT_ID not set");
+    let discord_client_secret = std::env::var("DISCORD_CLIENT_SECRET").expect("DISCORD_CLIENT_SECRET not set");
+    let discord_redirect_uri = std::env::var("DISCORD_REDIRECT_URI").unwrap_or_else(|_| "http://localhost:3000/oauth/callback".to_string());
+    let session_secret = std::env::var("SESSION_SECRET").unwrap_or_else(|_| "dev-only-change-me".to_string());
     
     // DB接続とマイグレーション実行
     let pool = PgPool::connect(&database_url).await.expect("DB接続失敗");
@@ -337,14 +346,47 @@ async fn main() {
     }
     println!("Migrations completed successfully!");
     
-    let handler = Handler { pool: Arc::new(pool) };
+    let pool = Arc::new(pool);
+    let handler = Handler { pool: pool.clone() };
     let intents = GatewayIntents::all();
     let mut client = Client::builder(&token, intents)
         .event_handler(handler)
         .await
         .expect("Error creating client");
 
-    if let Err(why) = client.start().await {
-        println!("Client error: {:?}", why);
-    }
+    // Web state 構築
+    let session_key = web::session::derive_key_from_env(&session_secret);
+    let state = web::AppState {
+        pool: pool.clone(),
+        discord_client_id,
+        discord_client_secret,
+        discord_redirect_uri,
+        session_key,
+    };
+    let app: Router = web::build_router(state);
+
+    let mut set = JoinSet::new();
+    // Discord Bot
+    set.spawn(async move {
+        if let Err(why) = client.start().await {
+            eprintln!("Client error: {:?}", why);
+        }
+    });
+    // Web server
+    set.spawn(async move {
+        use axum::routing::get;
+        use axum::http::StatusCode;
+        let listener = tokio::net::TcpListener::bind(&web_bind).await.expect("bind web");
+        println!("Web listening on http://{}", web_bind);
+        axum::serve(listener, app)
+            .with_graceful_shutdown(async {
+                // TODO: hook shutdown signals
+            })
+            .await
+            .map_err(|e| eprintln!("web server error: {e}"))
+            .ok();
+    });
+
+    // プロセスを維持
+    while let Some(_res) = set.join_next().await {}
 }
