@@ -1,0 +1,33 @@
+{
+  "name": "nkmzbot (Rust + Postgres)",
+  "dockerComposeFile": ["./docker-compose.yml"],
+  "service": "app",
+  "workspaceFolder": "/workspaces/nkmzbot",
+  "remoteUser": "root",
+  "overrideCommand": true,
+  "containerEnv": {
+    "CARGO_HOME": "/workspaces/.cargo",
+    "RUSTUP_HOME": "/workspaces/.rustup",
+    "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workspaces/.cargo/bin"
+  },
+  "mounts": [
+    "source=devcontainer-cargo-cache,target=/workspaces/.cargo,type=volume",
+    "source=devcontainer-rustup-cache,target=/workspaces/.rustup,type=volume"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "serayuzgur.crates",
+        "tamasfe.even-better-toml",
+        "usernamehw.errorlens"
+      ]
+    }
+  },
+  "forwardPorts": [3000, 5432],
+  "portsAttributes": {
+    "3000": { "label": "Web UI" },
+    "5432": { "label": "Postgres" }
+  },
+  "postCreateCommand": "rustup component add clippy && cargo fetch"
+}
