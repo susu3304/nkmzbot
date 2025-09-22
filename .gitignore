@@ -1,8 +1,8 @@
 target/
 .env
 .env.*
-Dockerfile*
-docker-compose.yml*
+#Dockerfile*
+#docker-compose.yml*
 *.log
 node_modules/
 .vscode/
