@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use axum::{routing::{get, post}, Router, extract::{Path, Query, State}, response::{Html, IntoResponse, Redirect}, Form, http::StatusCode};
+use axum::{routing::get, Router, extract::{Path, Query, State}, response::{Html, IntoResponse, Redirect}, Form, http::StatusCode};
 use askama::Template;
 use serde::Deserialize;
 use sqlx::Row;
@@ -16,9 +16,19 @@ pub fn create_router(state: AppState) -> Router {
         .route("/logout", get(oauth::logout))
         .route("/dashboard", get(dashboard))
         .route("/guilds/:guild_id/commands", get(commands_page))
-        .route("/guilds/:guild_id/commands/add", post(add_command))
-        .route("/guilds/:guild_id/commands/update", post(update_command))
-        .route("/guilds/:guild_id/commands/bulk-delete", post(bulk_delete_commands))
+        // For POST endpoints, also accept GET and redirect back to the list to avoid 405 on reload/direct access
+        .route(
+            "/guilds/:guild_id/commands/add",
+            get(redirect_to_commands).post(add_command),
+        )
+        .route(
+            "/guilds/:guild_id/commands/update",
+            get(redirect_to_commands).post(update_command),
+        )
+        .route(
+            "/guilds/:guild_id/commands/bulk-delete",
+            get(redirect_to_commands).post(bulk_delete_commands),
+        )
         .with_state(state)
 }
 
@@ -80,7 +90,7 @@ async fn dashboard(State(state): State<AppState>, jar: axum_extra::extract::cook
 #[derive(Debug, Deserialize)]
 struct ListQuery { q: Option<String> }
 
-pub async fn commands_page(
+async fn commands_page(
     State(state): State<AppState>,
     jar: axum_extra::extract::cookie::CookieJar,
     Path(guild_id): Path<i64>,
@@ -181,5 +191,10 @@ async fn bulk_delete_commands(State(state): State<AppState>, jar: axum_extra::ex
             let _ = crate::commands::remove_command(&state.pool, guild_id, &name).await;
         }
     }
+    Redirect::to(&format!("/guilds/{guild_id}/commands")).into_response()
+}
+
+// Redirect handler for accidental GET access to POST endpoints
+async fn redirect_to_commands(Path(guild_id): Path<i64>) -> impl IntoResponse {
     Redirect::to(&format!("/guilds/{guild_id}/commands")).into_response()
 }
