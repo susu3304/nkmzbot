@@ -30,7 +30,6 @@ pub struct DiscordGuild {
     pub id: String,
     pub name: String,
     pub owner: Option<bool>,
-    pub permissions: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -52,6 +51,7 @@ pub async fn login(State(state): State<super::AppState>, jar: CookieJar) -> impl
     let mut cookie = Cookie::new("oauth_state", state_token.clone());
     cookie.set_http_only(true);
     cookie.set_same_site(SameSite::Lax);
+    cookie.set_path("/");
     let jar = jar.add(cookie);
 
     let url = format!(
@@ -92,6 +92,8 @@ pub async fn oauth_callback(
         ("grant_type", "authorization_code"),
         ("code", code.as_str()),
         ("redirect_uri", state.discord_redirect_uri.as_str()),
+        // Discord では scope は省略可能だが、念のため明示する
+        ("scope", "identify guilds"),
     ];
     let resp = match client.post(DISCORD_TOKEN_URL).form(&form).send().await {
         Ok(r) => r,
@@ -130,19 +132,26 @@ pub async fn oauth_callback(
     let mut sess = Cookie::new("session", value);
     sess.set_http_only(true);
     sess.set_same_site(SameSite::Lax);
+    sess.set_path("/");
     let jar = jar.add(sess);
 
     // ユーザ名を軽く表示用にCookieに
     let mut u = Cookie::new("username", user.global_name.unwrap_or(user.username));
     u.set_same_site(SameSite::Lax);
+    u.set_path("/");
     let jar = jar.add(u);
 
     (jar, Redirect::to("/dashboard")).into_response()
 }
 
 pub async fn logout(jar: CookieJar) -> impl IntoResponse {
-    let jar = jar.remove(Cookie::from("session"));
-    let jar = jar.remove(Cookie::from("username"));
+    // 削除時も Path=/ を指定して確実に削除
+    let mut s = Cookie::from("session");
+    s.set_path("/");
+    let jar = jar.remove(s);
+    let mut u = Cookie::from("username");
+    u.set_path("/");
+    let jar = jar.remove(u);
     (jar, Redirect::to("/"))
 }
 
@@ -151,9 +160,20 @@ pub async fn fetch_user_guilds(access_token: &str) -> Result<Vec<DiscordGuild>, 
     let res = client
         .get(format!("{}/users/@me/guilds", DISCORD_API_BASE))
         .bearer_auth(access_token)
+        .header(reqwest::header::USER_AGENT, "nkmzbot/1.0 (+https://github.com/susu3304/nkmzbot)")
+        .header(reqwest::header::ACCEPT, "application/json")
         .send()
-        .await?
-        .error_for_status()?;
+        .await?;
+
+    let status = res.status();
+    let res = match res.error_for_status() {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("[oauth] fetch_user_guilds failed: status={} err={}", status, e);
+            return Err(e);
+        }
+    };
+
     let guilds: Vec<DiscordGuild> = res.json().await?;
     Ok(guilds)
 }

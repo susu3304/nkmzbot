@@ -379,9 +379,7 @@ async fn main() {
         let listener = tokio::net::TcpListener::bind(&web_bind).await.expect("bind web");
         println!("Web listening on http://{}", web_bind);
         axum::serve(listener, app)
-            .with_graceful_shutdown(async {
-                // TODO: hook shutdown signals
-            })
+            .with_graceful_shutdown(shutdown_signal())
             .await
             .map_err(|e| eprintln!("web server error: {e}"))
             .ok();
@@ -389,4 +387,26 @@ async fn main() {
 
     // プロセスを維持
     while let Some(_res) = set.join_next().await {}
+}
+
+// Graceful shutdown: wait for Ctrl+C or SIGTERM
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c().await.ok();
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut sigterm = signal(SignalKind::terminate()).expect("failed to install SIGTERM handler");
+        sigterm.recv().await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
 }

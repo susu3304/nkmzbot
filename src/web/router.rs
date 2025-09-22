@@ -33,6 +33,7 @@ async fn home(State(_state): State<AppState>, jar: axum_extra::extract::cookie::
     let mut cookie = axum_extra::extract::cookie::Cookie::new("csrf", csrf);
     cookie.set_http_only(true);
     cookie.set_same_site(axum_extra::extract::cookie::SameSite::Lax);
+    cookie.set_path("/");
     let jar = jar.add(cookie);
     let tpl = crate::web::templates::HomeTemplate {};
     (jar, Html(tpl.render().unwrap_or_else(|_| "<h1>Home</h1>".to_string()))).into_response()
