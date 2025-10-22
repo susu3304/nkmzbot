@@ -4,4 +4,6 @@ services:
     container_name: nkmzbot
     env_file:
       - .env
+    ports:
+      - "3021:3021"
     restart: always
