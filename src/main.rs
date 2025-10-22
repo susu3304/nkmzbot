@@ -5,14 +5,101 @@ use serenity::model::application::command::CommandOptionType;
 use serenity::model::application::command::CommandType;
 use serenity::model::application::component::ActionRowComponent;
 use serenity::model::application::component::InputTextStyle;
+use serenity::model::guild::Guild;
+use serenity::model::id::GuildId;
 use serenity::prelude::*;
 use sqlx::PgPool;
 use futures::StreamExt;
 use std::sync::Arc;
+use axum::Router;
+use axum_extra::extract::cookie::{Cookie, SameSite};
+use tokio::task::JoinSet;
+mod web;
 mod commands;
 
 struct Handler {
     pool: Arc<PgPool>,
+}
+
+async fn register_guild_commands(ctx: &Context, guild_id: GuildId) {
+    // ギルド内のアプリケーションコマンドを「置き換え」る（重複防止）
+    if let Err(e) = guild_id
+        .set_application_commands(&ctx.http, |commands| {
+            commands
+                .create_application_command(|command| {
+                    command
+                        .name("add")
+                        .description("新しいコマンドを追加します")
+                        .dm_permission(false)
+                        .create_option(|option| {
+                            option
+                                .name("name")
+                                .description("コマンド名")
+                                .kind(CommandOptionType::String)
+                                .required(true)
+                        })
+                        .create_option(|option| {
+                            option
+                                .name("response")
+                                .description("返答内容")
+                                .kind(CommandOptionType::String)
+                                .required(true)
+                        })
+                })
+                .create_application_command(|command| {
+                    command
+                        .name("remove")
+                        .description("コマンドを削除します")
+                        .dm_permission(false)
+                        .create_option(|option| {
+                            option
+                                .name("name")
+                                .description("削除するコマンド名")
+                                .kind(CommandOptionType::String)
+                                .required(true)
+                        })
+                })
+                .create_application_command(|command| {
+                    command
+                        .name("update")
+                        .description("コマンドを更新します")
+                        .dm_permission(false)
+                        .create_option(|option| {
+                            option
+                                .name("name")
+                                .description("更新するコマンド名")
+                                .kind(CommandOptionType::String)
+                                .required(true)
+                        })
+                        .create_option(|option| {
+                            option
+                                .name("response")
+                                .description("新しい返答内容")
+                                .kind(CommandOptionType::String)
+                                .required(true)
+                        })
+                })
+                .create_application_command(|command| {
+                    command
+                        .name("list")
+                        .description("登録されているコマンド一覧を表示します")
+                        .dm_permission(false)
+                })
+                .create_application_command(|command| {
+                    command
+                        .name("Register as Response")
+                        .kind(CommandType::Message)
+                })
+        })
+        .await
+    {
+        eprintln!(
+            "Failed to register application commands for guild {}: {:?}",
+            guild_id.0, e
+        );
+    } else {
+        println!("Registered application commands for guild {}", guild_id.0);
+    }
 }
 
 #[async_trait]
@@ -20,80 +107,16 @@ impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
         
-        // 全てのギルドにスラッシュコマンドを登録
+        // 既存の全ギルドにスラッシュコマンドを登録（重複防止のため置換）
         for guild in ready.guilds {
-            let guild_id = guild.id;
-            
-            // addコマンド
-            let _ = guild_id.create_application_command(&ctx.http, |command| {
-                command
-                    .name("add")
-                    .description("新しいコマンドを追加します")
-                    .create_option(|option| {
-                        option
-                            .name("name")
-                            .description("コマンド名")
-                            .kind(CommandOptionType::String)
-                            .required(true)
-                    })
-                    .create_option(|option| {
-                        option
-                            .name("response")
-                            .description("返答内容")
-                            .kind(CommandOptionType::String)
-                            .required(true)
-                    })
-            }).await;
-            
-            // removeコマンド
-            let _ = guild_id.create_application_command(&ctx.http, |command| {
-                command
-                    .name("remove")
-                    .description("コマンドを削除します")
-                    .create_option(|option| {
-                        option
-                            .name("name")
-                            .description("削除するコマンド名")
-                            .kind(CommandOptionType::String)
-                            .required(true)
-                    })
-            }).await;
-            
-            // updateコマンド
-            let _ = guild_id.create_application_command(&ctx.http, |command| {
-                command
-                    .name("update")
-                    .description("コマンドを更新します")
-                    .create_option(|option| {
-                        option
-                            .name("name")
-                            .description("更新するコマンド名")
-                            .kind(CommandOptionType::String)
-                            .required(true)
-                    })
-                    .create_option(|option| {
-                        option
-                            .name("response")
-                            .description("新しい返答内容")
-                            .kind(CommandOptionType::String)
-                            .required(true)
-                    })
-            }).await;
-            
-            // listコマンド
-            let _ = guild_id.create_application_command(&ctx.http, |command| {
-                command
-                    .name("list")
-                    .description("登録されているコマンド一覧を表示します")
-            }).await;
-            
-            // メッセージコンテキストメニュー: メッセージを返答として登録
-            let _ = guild_id.create_application_command(&ctx.http, |command| {
-                command
-                    .name("Register as Response")
-                    .kind(CommandType::Message)
-            }).await;
+            register_guild_commands(&ctx, guild.id).await;
         }
+    }
+
+    async fn guild_create(&self, ctx: Context, guild: Guild) {
+        // ギルドが作成/利用可能になったら、コマンドを確実に登録
+        println!("Guild available/joined: {} (id={}) — ensuring commands", guild.name, guild.id.0);
+        register_guild_commands(&ctx, guild.id).await;
     }
 
     async fn message(&self, ctx: Context, msg: Message) {
@@ -306,6 +329,11 @@ async fn main() {
     dotenvy::dotenv().ok();
     let token = std::env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
     let database_url = std::env::var("DATABASE_URL").expect("Expected a database url in the environment");
+    let web_bind = std::env::var("WEB_BIND").unwrap_or_else(|_| "0.0.0.0:3000".to_string());
+    let discord_client_id = std::env::var("DISCORD_CLIENT_ID").expect("DISCORD_CLIENT_ID not set");
+    let discord_client_secret = std::env::var("DISCORD_CLIENT_SECRET").expect("DISCORD_CLIENT_SECRET not set");
+    let discord_redirect_uri = std::env::var("DISCORD_REDIRECT_URI").unwrap_or_else(|_| "http://localhost:3000/oauth/callback".to_string());
+    let session_secret = std::env::var("SESSION_SECRET").unwrap_or_else(|_| "dev-only-change-me".to_string());
     
     // DB接続とマイグレーション実行
     let pool = PgPool::connect(&database_url).await.expect("DB接続失敗");
@@ -318,14 +346,67 @@ async fn main() {
     }
     println!("Migrations completed successfully!");
     
-    let handler = Handler { pool: Arc::new(pool) };
+    let pool = Arc::new(pool);
+    let handler = Handler { pool: pool.clone() };
     let intents = GatewayIntents::all();
     let mut client = Client::builder(&token, intents)
         .event_handler(handler)
         .await
         .expect("Error creating client");
 
-    if let Err(why) = client.start().await {
-        println!("Client error: {:?}", why);
+    // Web state 構築
+    let session_key = web::session::derive_key_from_env(&session_secret);
+    let state = web::AppState {
+        pool: pool.clone(),
+        discord_client_id,
+        discord_client_secret,
+        discord_redirect_uri,
+        session_key,
+    };
+    let app: Router = web::build_router(state);
+
+    let mut set = JoinSet::new();
+    // Discord Bot
+    set.spawn(async move {
+        if let Err(why) = client.start().await {
+            eprintln!("Client error: {:?}", why);
+        }
+    });
+    // Web server
+    set.spawn(async move {
+        use axum::routing::get;
+        use axum::http::StatusCode;
+        let listener = tokio::net::TcpListener::bind(&web_bind).await.expect("bind web");
+        println!("Web listening on http://{}", web_bind);
+        axum::serve(listener, app)
+            .with_graceful_shutdown(shutdown_signal())
+            .await
+            .map_err(|e| eprintln!("web server error: {e}"))
+            .ok();
+    });
+
+    // プロセスを維持
+    while let Some(_res) = set.join_next().await {}
+}
+
+// Graceful shutdown: wait for Ctrl+C or SIGTERM
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c().await.ok();
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut sigterm = signal(SignalKind::terminate()).expect("failed to install SIGTERM handler");
+        sigterm.recv().await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
     }
 }
