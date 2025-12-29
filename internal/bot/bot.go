@@ -11,6 +11,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/susu3304/nkmzbot/internal/commands"
 	"github.com/susu3304/nkmzbot/internal/db"
+	"github.com/susu3304/nkmzbot/internal/guess"
 	"github.com/susu3304/nkmzbot/internal/nomikai"
 )
 
@@ -18,6 +19,7 @@ type Bot struct {
 	session  *discordgo.Session
 	db       *db.DB
 	nomikai  *nomikai.Service
+	guess    *guess.Service
 	reminder *reminderWorker
 }
 
@@ -51,6 +53,7 @@ func New(token string, database *db.DB) (*Bot, error) {
 		session: session,
 		db:      database,
 		nomikai: nomikai.NewService(database),
+		guess:   guess.NewService(database),
 	}
 	bot.reminder = newReminderWorker(session, database, bot.nomikai)
 
