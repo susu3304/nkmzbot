@@ -10,9 +10,20 @@ import (
 	"github.com/susu3304/nkmzbot/internal/db"
 )
 
-func HandleRegisterAsResponse(s *discordgo.Session, i *discordgo.InteractionCreate) {
+type RegisterAsResponseCommand struct {
+	DB *db.DB
+}
+
+func (c *RegisterAsResponseCommand) Def() *discordgo.ApplicationCommand {
+	return &discordgo.ApplicationCommand{
+		Name: "Register as Response",
+		Type: discordgo.MessageApplicationCommand,
+	}
+}
+
+func (c *RegisterAsResponseCommand) Handler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	data := i.ApplicationCommandData()
-	
+
 	// Get the message from the interaction
 	if data.Resolved == nil || len(data.Resolved.Messages) == 0 {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -59,7 +70,11 @@ func HandleRegisterAsResponse(s *discordgo.Session, i *discordgo.InteractionCrea
 	}
 }
 
-func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.DB) {
+func (c *RegisterAsResponseCommand) ModalID() string {
+	return "reg_resp:"
+}
+
+func (c *RegisterAsResponseCommand) ModalHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	data := i.ModalSubmitData()
 	if !strings.HasPrefix(data.CustomID, "reg_resp:") {
 		return
@@ -112,7 +127,7 @@ func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db 
 	}
 
 	// Add command to database
-	err = db.AddCommand(context.Background(), guildID, commandName, responseContent)
+	err = c.DB.AddCommand(context.Background(), guildID, commandName, responseContent)
 	var content string
 	if err != nil {
 		content = "登録に失敗しました。同じ名前のコマンドが既に存在するかもしれません。"

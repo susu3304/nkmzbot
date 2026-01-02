@@ -21,6 +21,7 @@ type Bot struct {
 	nomikai  *nomikai.Service
 	guess    *guess.Service
 	reminder *reminderWorker
+	registry *commands.Registry
 }
 
 func New(token string, database *db.DB) (*Bot, error) {
@@ -49,11 +50,25 @@ func New(token string, database *db.DB) (*Bot, error) {
 		ExpectContinueTimeout: 1 * time.Second,
 	}
 
+	svcNomikai := nomikai.NewService(database)
+	svcGuess := guess.NewService(database)
+
+	registry := commands.NewRegistry()
+	registry.Register(&commands.AddCommand{DB: database})
+	registry.Register(&commands.RemoveCommand{DB: database})
+	registry.Register(&commands.UpdateCommand{DB: database})
+	registry.Register(&commands.ListCommand{DB: database})
+	registry.Register(&commands.NomikaiCommand{Svc: svcNomikai, DB: database})
+	registry.Register(&commands.GuessCommand{Svc: svcGuess})
+	registry.Register(&commands.JikanCommand{Svc: svcNomikai, DB: database})
+	registry.Register(&commands.RegisterAsResponseCommand{DB: database})
+
 	bot := &Bot{
-		session: session,
-		db:      database,
-		nomikai: nomikai.NewService(database),
-		guess:   guess.NewService(database),
+		session:  session,
+		db:       database,
+		nomikai:  svcNomikai,
+		guess:    svcGuess,
+		registry: registry,
 	}
 	bot.reminder = newReminderWorker(session, database, bot.nomikai)
 
@@ -73,13 +88,13 @@ func (b *Bot) Start() error {
 		return fmt.Errorf("failed to open discord session: %w", err)
 	}
 	log.Println("Discord bot is running")
-	
+
 	// Restore scheduled tasks from database
 	ctx := context.Background()
 	if err := commands.RestoreScheduledTasks(ctx, b.session, b.nomikai, b.db); err != nil {
 		log.Printf("Warning: failed to restore scheduled tasks: %v", err)
 	}
-	
+
 	b.reminder.start()
 	return nil
 }

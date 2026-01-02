@@ -8,10 +8,174 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/susu3304/nkmzbot/internal/db"
 	"github.com/susu3304/nkmzbot/internal/nomikai"
 )
 
-func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *nomikai.Service) {
+type NomikaiCommand struct {
+	Svc *nomikai.Service
+	DB  *db.DB
+}
+
+func (c *NomikaiCommand) Def() *discordgo.ApplicationCommand {
+	return &discordgo.ApplicationCommand{
+		Name:         "nomikai",
+		Description:  "飲み会割り勘セッションを操作します",
+		DMPermission: boolPtr(false),
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionSubCommand,
+				Name:        "start",
+				Description: "このチャンネルでセッションを開始",
+			},
+			{
+				Type:        discordgo.ApplicationCommandOptionSubCommand,
+				Name:        "stop",
+				Description: "このチャンネルのセッションを終了",
+			},
+			{
+				Type:        discordgo.ApplicationCommandOptionSubCommand,
+				Name:        "join",
+				Description: "自分を参加者に追加",
+			},
+			{
+				Type:        discordgo.ApplicationCommandOptionSubCommand,
+				Name:        "member",
+				Description: "指定ユーザーを参加者に追加",
+				Options: []*discordgo.ApplicationCommandOption{
+					{
+						Type:        discordgo.ApplicationCommandOptionString,
+						Name:        "users",
+						Description: "追加するユーザー（メンション/IDをスペース区切り。単一も可）",
+						Required:    true,
+					},
+				},
+			},
+			{
+				Type:        discordgo.ApplicationCommandOptionSubCommand,
+				Name:        "weight",
+				Description: "参加者の比率を設定",
+				Options: []*discordgo.ApplicationCommandOption{
+					{
+						Type:        discordgo.ApplicationCommandOptionString,
+						Name:        "users",
+						Description: "対象ユーザー（メンション/IDをスペース区切り。単一も可）",
+						Required:    true,
+					},
+					{
+						Type:        discordgo.ApplicationCommandOptionNumber,
+						Name:        "value",
+						Description: "比率 (例: 1.5)",
+						Required:    true,
+					},
+				},
+			},
+			{
+				Type:        discordgo.ApplicationCommandOptionSubCommand,
+				Name:        "tatekae",
+				Description: "立替（支出）を記録（負額も可）",
+				Options: []*discordgo.ApplicationCommandOption{
+					{
+						Type:        discordgo.ApplicationCommandOptionInteger,
+						Name:        "amount",
+						Description: "金額（円）",
+						Required:    true,
+					},
+					{
+						Type:        discordgo.ApplicationCommandOptionUser,
+						Name:        "payer",
+						Description: "支払者（未指定なら自分）",
+						Required:    false,
+					},
+					{
+						Type:        discordgo.ApplicationCommandOptionString,
+						Name:        "for",
+						Description: "対象ユーザー（メンション/ID。スペース区切りで複数可）",
+						Required:    false,
+					},
+					{
+						Type:        discordgo.ApplicationCommandOptionString,
+						Name:        "memo",
+						Description: "メモ",
+						Required:    false,
+					},
+				},
+			},
+			{
+				Type:        discordgo.ApplicationCommandOptionSubCommand,
+				Name:        "settle",
+				Description: "ネット精算を計算",
+			},
+			{
+				Type:        discordgo.ApplicationCommandOptionSubCommand,
+				Name:        "status",
+				Description: "現在の状況を表示",
+			},
+			{
+				Type:        discordgo.ApplicationCommandOptionSubCommand,
+				Name:        "memberlist",
+				Description: "参加中のメンバーを表示",
+			},
+			{
+				Type:        discordgo.ApplicationCommandOptionSubCommand,
+				Name:        "remind",
+				Description: "未払いタスクの定期リマインドを設定し即時送信",
+				Options: []*discordgo.ApplicationCommandOption{
+					{
+						Type:        discordgo.ApplicationCommandOptionString,
+						Name:        "interval",
+						Description: "リマインド間隔 (例: 1d2h3m / デフォルト1d / 最小1m)",
+						Required:    false,
+					},
+					{
+						Type:        discordgo.ApplicationCommandOptionString,
+						Name:        "state",
+						Description: "on/off (on=有効, off=停止)",
+						Required:    false,
+						Choices: []*discordgo.ApplicationCommandOptionChoice{
+							{Name: "on", Value: "on"},
+							{Name: "off", Value: "off"},
+						},
+					},
+				},
+			},
+			{
+				Type:        discordgo.ApplicationCommandOptionSubCommand,
+				Name:        "seisan",
+				Description: "精算の支払いを登録して未払いを減らす",
+				Options: []*discordgo.ApplicationCommandOption{
+					{
+						Type:        discordgo.ApplicationCommandOptionUser,
+						Name:        "to",
+						Description: "受け取り側",
+						Required:    true,
+					},
+					{
+						Type:         discordgo.ApplicationCommandOptionString,
+						Name:         "amount",
+						Description:  "支払った金額 (円) / all=未払い全額",
+						Required:     true,
+						Autocomplete: true,
+					},
+					{
+						Type:        discordgo.ApplicationCommandOptionUser,
+						Name:        "payer",
+						Description: "支払者 (未指定なら自分)",
+						Required:    false,
+					},
+					{
+						Type:        discordgo.ApplicationCommandOptionString,
+						Name:        "memo",
+						Description: "メモ",
+						Required:    false,
+					},
+				},
+			},
+		},
+	}
+}
+
+func (c *NomikaiCommand) Handler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	data := i.ApplicationCommandData()
 	if len(data.Options) == 0 {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -34,13 +198,13 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
 			return
 		}
 		// Defaults: rounding=1, remainder strategy="organizer"
-		err := svc.StartSession(context.Background(), channelID, gid, userID, 1, "organizer")
+		err := c.Svc.StartSession(context.Background(), channelID, gid, userID, 1, "organizer")
 		respondSimple(s, i, err, "このチャンネルでセッションを開始しました", "既に開始されています")
 	case "stop":
-		err := svc.StopSession(context.Background(), channelID)
+		err := c.Svc.StopSession(context.Background(), channelID)
 		respondSimple(s, i, err, "セッションを終了しました", "セッションが存在しません")
 	case "join":
-		err := svc.Join(context.Background(), channelID, userID)
+		err := c.Svc.Join(context.Background(), channelID, userID)
 		respondSimple(s, i, err, "参加者として登録しました", "セッションが開始されていません")
 	case "member":
 		usersOpt := getStringOption(sub.Options, "users")
@@ -54,7 +218,7 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
 			return
 		}
 		for _, id := range ids {
-			if err := svc.Join(context.Background(), channelID, id); err != nil {
+			if err := c.Svc.Join(context.Background(), channelID, id); err != nil {
 				respondText(s, i, "セッションが開始されていません")
 				return
 			}
@@ -86,7 +250,7 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
 		}
 		var joinedIDs []string
 		for _, id := range ids {
-			joined, _ := svc.SetWeight(context.Background(), channelID, id, *val)
+			joined, _ := c.Svc.SetWeight(context.Background(), channelID, id, *val)
 			if joined {
 				joinedIDs = append(joinedIDs, id)
 			}
@@ -135,9 +299,9 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
 		var benJoined []string
 		var err error
 		if len(beneficiaries) > 0 {
-			joined, benJoined, err = svc.AddPaymentFor(context.Background(), channelID, payer, *amtOpt, memo, beneficiaries)
+			joined, benJoined, err = c.Svc.AddPaymentFor(context.Background(), channelID, payer, *amtOpt, memo, beneficiaries)
 		} else {
-			joined, err = svc.AddPayment(context.Background(), channelID, payer, *amtOpt, memo)
+			joined, err = c.Svc.AddPayment(context.Background(), channelID, payer, *amtOpt, memo)
 		}
 		if err != nil {
 			respondText(s, i, err.Error())
@@ -172,7 +336,7 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
 		}
 		respondText(s, i, msg)
 	case "settle":
-		res, err := svc.Settle(context.Background(), channelID)
+		res, err := c.Svc.Settle(context.Background(), channelID)
 		if err != nil {
 			respondText(s, i, err.Error())
 			return
@@ -183,14 +347,14 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
 		}
 		respondText(s, i, res.Summary)
 	case "status":
-		txt, err := svc.Status(context.Background(), channelID)
+		txt, err := c.Svc.Status(context.Background(), channelID)
 		if err != nil {
 			respondText(s, i, err.Error())
 			return
 		}
 		respondText(s, i, txt)
 	case "memberlist":
-		ids, err := svc.Members(context.Background(), channelID)
+		ids, err := c.Svc.Members(context.Background(), channelID)
 		if err != nil {
 			respondText(s, i, err.Error())
 			return
@@ -228,7 +392,7 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
 				return
 			}
 		}
-		msg, err := svc.ConfigureReminder(context.Background(), channelID, intervalMinutes, disable, true)
+		msg, err := c.Svc.ConfigureReminder(context.Background(), channelID, intervalMinutes, disable, true)
 		if err != nil {
 			respondText(s, i, err.Error())
 			return
@@ -269,7 +433,7 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
 			amount = v
 		}
 
-		msg, err := svc.RegisterPayment(context.Background(), channelID, payer, payee, amount, memo, userID, payAll)
+		msg, err := c.Svc.RegisterPayment(context.Background(), channelID, payer, payee, amount, memo, userID, payAll)
 		if err != nil {
 			respondText(s, i, err.Error())
 			return
@@ -278,6 +442,82 @@ func HandleNomikai(s *discordgo.Session, i *discordgo.InteractionCreate, svc *no
 	default:
 		respondText(s, i, "未知のサブコマンドです")
 	}
+}
+
+func (c *NomikaiCommand) AutocompleteHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	data := i.ApplicationCommandData()
+	if data.Name != "nomikai" {
+		return
+	}
+	if len(data.Options) == 0 {
+		return
+	}
+	sub := data.Options[0]
+	if sub.Name != "seisan" {
+		return
+	}
+
+	// Find focused option in the subcommand.
+	focusedName := ""
+	userInput := ""
+	for _, opt := range sub.Options {
+		if opt.Focused {
+			focusedName = opt.Name
+			userInput = opt.StringValue()
+			break
+		}
+	}
+	if focusedName != "amount" {
+		return
+	}
+
+	payeeID := ""
+	payerID := ""
+	for _, opt := range sub.Options {
+		switch opt.Name {
+		case "to":
+			if id, ok := opt.Value.(string); ok {
+				payeeID = id
+			}
+		case "payer":
+			if id, ok := opt.Value.(string); ok {
+				payerID = id
+			}
+		}
+	}
+	if payerID == "" && i.Member != nil && i.Member.User != nil {
+		payerID = i.Member.User.ID
+	}
+
+	choices := []*discordgo.ApplicationCommandOptionChoice{
+		{Name: "all（未払い全額）", Value: "all"},
+	}
+
+	// If we can compute outstanding amount for the pair, also offer it as a one-click numeric choice.
+	if payerID != "" && payeeID != "" {
+		ev, err := c.DB.ActiveEventByChannel(context.Background(), i.ChannelID)
+		if err == nil && ev != nil {
+			out, err := c.DB.OutstandingSettlementAmount(context.Background(), ev.ID, payerID, payeeID)
+			if err == nil && out > 0 {
+				choices = append([]*discordgo.ApplicationCommandOptionChoice{
+					{Name: fmt.Sprintf("%d（未払い全額）", out), Value: strconv.FormatInt(out, 10)},
+				}, choices...)
+			}
+		}
+	}
+
+	// If user typed something, echo it as a choice so they can commit it quickly.
+	if strings.TrimSpace(userInput) != "" {
+		choices = append(choices, &discordgo.ApplicationCommandOptionChoice{Name: userInput, Value: userInput})
+	}
+	if len(choices) > 25 {
+		choices = choices[:25]
+	}
+
+	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionApplicationCommandAutocompleteResult,
+		Data: &discordgo.InteractionResponseData{Choices: choices},
+	})
 }
 
 func respondSimple(s *discordgo.Session, i *discordgo.InteractionCreate, err error, ok, ng string) {

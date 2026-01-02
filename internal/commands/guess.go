@@ -12,7 +12,57 @@ import (
 	"github.com/susu3304/nkmzbot/internal/guess"
 )
 
-func HandleGuess(s *discordgo.Session, i *discordgo.InteractionCreate, svc *guess.Service) {
+type GuessCommand struct {
+	Svc *guess.Service
+}
+
+func (c *GuessCommand) Def() *discordgo.ApplicationCommand {
+	return &discordgo.ApplicationCommand{
+		Name:         "guess",
+		Description:  "ジオゲッサーを開始・プレイします",
+		DMPermission: boolPtr(false),
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionSubCommand,
+				Name:        "start",
+				Description: "このチャンネルでジオゲッサーセッションを開始",
+			},
+			{
+				Type:        discordgo.ApplicationCommandOptionSubCommand,
+				Name:        "stop",
+				Description: "このチャンネルのセッションを終了",
+			},
+			{
+				Type:        discordgo.ApplicationCommandOptionSubCommand,
+				Name:        "guess",
+				Description: "推測を送信",
+				Options: []*discordgo.ApplicationCommandOption{
+					{
+						Type:        discordgo.ApplicationCommandOptionString,
+						Name:        "url",
+						Description: "Google Mapsの短縮URL",
+						Required:    true,
+					},
+				},
+			},
+			{
+				Type:        discordgo.ApplicationCommandOptionSubCommand,
+				Name:        "answer",
+				Description: "正解を発表してスコアを表示",
+				Options: []*discordgo.ApplicationCommandOption{
+					{
+						Type:        discordgo.ApplicationCommandOptionString,
+						Name:        "url",
+						Description: "正解のGoogle Maps URL",
+						Required:    true,
+					},
+				},
+			},
+		},
+	}
+}
+
+func (c *GuessCommand) Handler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	data := i.ApplicationCommandData()
 	if len(data.Options) == 0 {
 		respondText(s, i, "サブコマンドが指定されていません")
@@ -31,7 +81,7 @@ func HandleGuess(s *discordgo.Session, i *discordgo.InteractionCreate, svc *gues
 			respondText(s, i, "ギルドIDの取得に失敗しました")
 			return
 		}
-		err := svc.StartSession(context.Background(), channelID, gid, userID)
+		err := c.Svc.StartSession(context.Background(), channelID, gid, userID)
 		if err != nil {
 			if err == guess.ErrSessionAlreadyExists {
 				respondText(s, i, "このチャンネルには既にセッションが開始されています")
@@ -43,7 +93,7 @@ func HandleGuess(s *discordgo.Session, i *discordgo.InteractionCreate, svc *gues
 		respondText(s, i, "✅ ジオゲッサーセッションを開始しました！\n`/guess <Google Maps URL>` で推測を送信してください")
 
 	case "stop":
-		err := svc.StopSession(context.Background(), channelID)
+		err := c.Svc.StopSession(context.Background(), channelID)
 		if err != nil {
 			if err == guess.ErrNoActiveSession {
 				respondText(s, i, "このチャンネルにはアクティブなセッションがありません")
@@ -79,7 +129,7 @@ func HandleGuess(s *discordgo.Session, i *discordgo.InteractionCreate, svc *gues
 		}
 
 		// Add guess to session
-		err = svc.AddGuess(context.Background(), channelID, userID, lat, lng, finalURL)
+		err = c.Svc.AddGuess(context.Background(), channelID, userID, lat, lng, finalURL)
 		if err != nil {
 			if err == guess.ErrNoActiveSession {
 				s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
@@ -123,7 +173,7 @@ func HandleGuess(s *discordgo.Session, i *discordgo.InteractionCreate, svc *gues
 		}
 
 		// Set answer and calculate scores
-		results, err := svc.SetAnswer(context.Background(), channelID, lat, lng, finalURL)
+		results, err := c.Svc.SetAnswer(context.Background(), channelID, lat, lng, finalURL)
 		if err != nil {
 			if err == guess.ErrNoActiveSession {
 				s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{

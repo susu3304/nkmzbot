@@ -32,6 +32,83 @@ var (
 	jst = time.FixedZone("JST", 9*60*60)
 )
 
+type JikanCommand struct {
+	Svc *nomikai.Service
+	DB  *db.DB
+}
+
+func (c *JikanCommand) Def() *discordgo.ApplicationCommand {
+	return &discordgo.ApplicationCommand{
+		Name:         "jikan",
+		Description:  "スケジュール実行を管理します",
+		DMPermission: boolPtr(false),
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionSubCommand,
+				Name:        "add",
+				Description: "指定された時間にコマンドを実行します",
+				Options: []*discordgo.ApplicationCommandOption{
+					{
+						Type:        discordgo.ApplicationCommandOptionString,
+						Name:        "command",
+						Description: "実行するコマンド（例: nomikai start, または任意のメッセージ）",
+						Required:    true,
+					},
+					{
+						Type:        discordgo.ApplicationCommandOptionString,
+						Name:        "time",
+						Description: "実行する時間（HH:MM または YYYY-MM-DD HH:MM）",
+						Required:    true,
+					},
+					{
+						Type:        discordgo.ApplicationCommandOptionBoolean,
+						Name:        "repeat",
+						Description: "毎日繰り返すかどうか",
+						Required:    false,
+					},
+				},
+			},
+			{
+				Type:        discordgo.ApplicationCommandOptionSubCommand,
+				Name:        "list",
+				Description: "予約されているコマンド一覧を表示します",
+			},
+			{
+				Type:        discordgo.ApplicationCommandOptionSubCommand,
+				Name:        "delete",
+				Description: "予約されているコマンドを削除します",
+				Options: []*discordgo.ApplicationCommandOption{
+					{
+						Type:        discordgo.ApplicationCommandOptionInteger,
+						Name:        "id",
+						Description: "削除するタスクのID",
+						Required:    true,
+					},
+				},
+			},
+		},
+	}
+}
+
+func (c *JikanCommand) Handler(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	options := i.ApplicationCommandData().Options
+	if len(options) == 0 {
+		respondText(s, i, "サブコマンドを指定してください")
+		return
+	}
+
+	subCmd := options[0]
+
+	switch subCmd.Name {
+	case "add":
+		handleJikanAdd(s, i, subCmd.Options, c.Svc, c.DB)
+	case "list":
+		handleJikanList(s, i)
+	case "delete":
+		handleJikanDelete(s, i, subCmd.Options, c.DB)
+	}
+}
+
 // RestoreScheduledTasks loads all scheduled tasks from the database and schedules them
 func RestoreScheduledTasks(ctx context.Context, s *discordgo.Session, svc *nomikai.Service, database *db.DB) error {
 	dbTasks, err := database.ListAllScheduledTasks(ctx)
@@ -82,25 +159,6 @@ func RestoreScheduledTasks(ctx context.Context, s *discordgo.Session, svc *nomik
 
 	log.Printf("Restored %d scheduled tasks", len(activeTasks))
 	return nil
-}
-
-func HandleJikan(s *discordgo.Session, i *discordgo.InteractionCreate, svc *nomikai.Service, database *db.DB) {
-	options := i.ApplicationCommandData().Options
-	if len(options) == 0 {
-		respondText(s, i, "サブコマンドを指定してください")
-		return
-	}
-
-	subCmd := options[0]
-
-	switch subCmd.Name {
-	case "add":
-		handleJikanAdd(s, i, subCmd.Options, svc, database)
-	case "list":
-		handleJikanList(s, i)
-	case "delete":
-		handleJikanDelete(s, i, subCmd.Options, database)
-	}
 }
 
 func handleJikanAdd(s *discordgo.Session, i *discordgo.InteractionCreate, options []*discordgo.ApplicationCommandInteractionDataOption, svc *nomikai.Service, database *db.DB) {
@@ -192,7 +250,7 @@ func handleJikanList(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 	var b strings.Builder
 	b.WriteString("予約コマンド一覧:\n")
-	
+
 	for _, t := range activeTasks {
 		if t.GuildID != gid {
 			continue
@@ -320,7 +378,7 @@ func scheduleTask(s *discordgo.Session, svc *nomikai.Service, database *db.DB, t
 
 func parseTime(input string) (time.Time, error) {
 	now := time.Now().In(jst)
-	
+
 	// Try HH:MM format
 	if t, err := time.ParseInLocation("15:04", input, jst); err == nil {
 		target := time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, jst)
@@ -358,7 +416,7 @@ func executeScheduledCommand(s *discordgo.Session, svc *nomikai.Service, databas
 			return
 		}
 	}
-	
+
 	switch mainCmd {
 	case "nomikai":
 		if len(parts) < 2 {

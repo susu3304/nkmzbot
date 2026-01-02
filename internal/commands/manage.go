@@ -3,11 +3,38 @@ package commands
 import (
 	"context"
 	"fmt"
+
 	"github.com/bwmarrin/discordgo"
 	"github.com/susu3304/nkmzbot/internal/db"
 )
 
-func HandleAdd(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.DB) {
+type AddCommand struct {
+	DB *db.DB
+}
+
+func (c *AddCommand) Def() *discordgo.ApplicationCommand {
+	return &discordgo.ApplicationCommand{
+		Name:         "add",
+		Description:  "新しいコマンドを追加します",
+		DMPermission: boolPtr(false),
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionString,
+				Name:        "name",
+				Description: "コマンド名",
+				Required:    true,
+			},
+			{
+				Type:        discordgo.ApplicationCommandOptionString,
+				Name:        "response",
+				Description: "返答内容",
+				Required:    true,
+			},
+		},
+	}
+}
+
+func (c *AddCommand) Handler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	data := i.ApplicationCommandData()
 	guildID := ParseGuildID(i.GuildID)
 
@@ -21,7 +48,7 @@ func HandleAdd(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.DB) 
 		}
 	}
 
-	err := db.AddCommand(context.Background(), guildID, name, response)
+	err := c.DB.AddCommand(context.Background(), guildID, name, response)
 	var content string
 	if err != nil {
 		content = "追加に失敗しました。"
@@ -37,7 +64,27 @@ func HandleAdd(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.DB) 
 	})
 }
 
-func HandleRemove(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.DB) {
+type RemoveCommand struct {
+	DB *db.DB
+}
+
+func (c *RemoveCommand) Def() *discordgo.ApplicationCommand {
+	return &discordgo.ApplicationCommand{
+		Name:         "remove",
+		Description:  "コマンドを削除します",
+		DMPermission: boolPtr(false),
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionString,
+				Name:        "name",
+				Description: "削除するコマンド名",
+				Required:    true,
+			},
+		},
+	}
+}
+
+func (c *RemoveCommand) Handler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	data := i.ApplicationCommandData()
 	guildID := ParseGuildID(i.GuildID)
 
@@ -49,7 +96,7 @@ func HandleRemove(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.D
 		}
 	}
 
-	err := db.RemoveCommand(context.Background(), guildID, name)
+	err := c.DB.RemoveCommand(context.Background(), guildID, name)
 	var content string
 	if err != nil {
 		content = "そのコマンドは存在しません。"
@@ -65,7 +112,33 @@ func HandleRemove(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.D
 	})
 }
 
-func HandleUpdate(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.DB) {
+type UpdateCommand struct {
+	DB *db.DB
+}
+
+func (c *UpdateCommand) Def() *discordgo.ApplicationCommand {
+	return &discordgo.ApplicationCommand{
+		Name:         "update",
+		Description:  "コマンドを更新します",
+		DMPermission: boolPtr(false),
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionString,
+				Name:        "name",
+				Description: "更新するコマンド名",
+				Required:    true,
+			},
+			{
+				Type:        discordgo.ApplicationCommandOptionString,
+				Name:        "response",
+				Description: "新しい返答内容",
+				Required:    true,
+			},
+		},
+	}
+}
+
+func (c *UpdateCommand) Handler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	data := i.ApplicationCommandData()
 	guildID := ParseGuildID(i.GuildID)
 
@@ -79,7 +152,7 @@ func HandleUpdate(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.D
 		}
 	}
 
-	err := db.UpdateCommand(context.Background(), guildID, name, response)
+	err := c.DB.UpdateCommand(context.Background(), guildID, name, response)
 	var content string
 	if err != nil {
 		content = "そのコマンドは存在しません。"

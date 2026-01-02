@@ -9,9 +9,21 @@ import (
 	"github.com/susu3304/nkmzbot/internal/db"
 )
 
-func HandleList(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.DB) {
+type ListCommand struct {
+	DB *db.DB
+}
+
+func (c *ListCommand) Def() *discordgo.ApplicationCommand {
+	return &discordgo.ApplicationCommand{
+		Name:         "list",
+		Description:  "登録されているコマンド一覧を表示します",
+		DMPermission: boolPtr(false),
+	}
+}
+
+func (c *ListCommand) Handler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	guildID := ParseGuildID(i.GuildID)
-	commands, err := db.ListCommands(context.Background(), guildID, "")
+	commands, err := c.DB.ListCommands(context.Background(), guildID, "")
 	if err != nil || len(commands) == 0 {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
