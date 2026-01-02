@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 type DiscordUser struct {
@@ -17,6 +18,11 @@ type DiscordGuild struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
 	Owner *bool  `json:"owner,omitempty"`
+}
+
+type guildCacheItem struct {
+	guilds    []DiscordGuild
+	expiresAt time.Time
 }
 
 func (a *API) getDiscordUser(accessToken string) (*DiscordUser, error) {
@@ -46,6 +52,16 @@ func (a *API) getDiscordUser(accessToken string) (*DiscordUser, error) {
 }
 
 func (a *API) getDiscordGuilds(accessToken string) ([]DiscordGuild, error) {
+	// Check cache
+	a.cacheMu.RLock()
+	item, ok := a.guildsCache[accessToken]
+	a.cacheMu.RUnlock()
+
+	if ok && time.Now().Before(item.expiresAt) {
+		return item.guilds, nil
+	}
+
+	// Fetch from Discord API
 	req, err := http.NewRequest("GET", "https://discord.com/api/users/@me/guilds", nil)
 	if err != nil {
 		return nil, err
@@ -68,6 +84,14 @@ func (a *API) getDiscordGuilds(accessToken string) ([]DiscordGuild, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&guilds); err != nil {
 		return nil, err
 	}
+
+	// Update cache
+	a.cacheMu.Lock()
+	a.guildsCache[accessToken] = guildCacheItem{
+		guilds:    guilds,
+		expiresAt: time.Now().Add(5 * time.Minute),
+	}
+	a.cacheMu.Unlock()
 
 	return guilds, nil
 }

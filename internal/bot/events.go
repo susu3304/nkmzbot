@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/susu3304/nkmzbot/internal/commands"
@@ -12,30 +13,25 @@ import (
 func (b *Bot) onReady(s *discordgo.Session, event *discordgo.Ready) {
 	log.Printf("%s is connected!", event.User.Username)
 
-	// Register commands for all guilds
-	for _, guild := range event.Guilds {
-		if err := b.registerGuildCommands(guild.ID); err != nil {
-			log.Printf("Failed to register commands for guild %s: %v", guild.ID, err)
-		}
+	// Register global commands once on startup
+	if err := b.registerGlobalCommands(); err != nil {
+		log.Printf("Failed to register global commands: %v", err)
 	}
 }
 
 func (b *Bot) onGuildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
-	log.Printf("Guild available/joined: %s (id=%s) — ensuring commands", event.Name, event.ID)
-	if err := b.registerGuildCommands(event.ID); err != nil {
-		log.Printf("Failed to register commands for guild %s: %v", event.ID, err)
-	}
+	log.Printf("Guild available/joined: %s (id=%s)", event.Name, event.ID)
 }
 
-func (b *Bot) registerGuildCommands(guildID string) error {
+func (b *Bot) registerGlobalCommands() error {
 	cmds := b.registry.GetDefinitions()
-	// Delete existing commands and register new ones
-	_, err := b.session.ApplicationCommandBulkOverwrite(b.session.State.User.ID, guildID, cmds)
+	// Register Global Commands by passing empty string as guildID
+	_, err := b.session.ApplicationCommandBulkOverwrite(b.session.State.User.ID, "", cmds)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("Registered application commands for guild %s", guildID)
+	log.Printf("Registered global application commands")
 	return nil
 }
 
@@ -45,12 +41,20 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		return
 	}
 
+	b.handleTextCommand(s, m)
+}
+
+func (b *Bot) handleTextCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 	content := strings.TrimSpace(m.Content)
 	if strings.HasPrefix(content, "!") && len(content) > 1 {
 		cmdName := content[1:]
 		if m.GuildID != "" {
 			guildID := commands.ParseGuildID(m.GuildID)
-			cmd, err := b.db.GetCommand(context.Background(), guildID, cmdName)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			cmd, err := b.db.GetCommand(ctx, guildID, cmdName)
 			if err == nil && cmd != nil {
 				s.ChannelMessageSend(m.ChannelID, cmd.Response)
 			}

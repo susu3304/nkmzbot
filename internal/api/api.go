@@ -3,6 +3,7 @@ package api
 import (
 	"log"
 	"net/http"
+	"sync"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
@@ -17,6 +18,8 @@ type API struct {
 	config      *config.Config
 	oauthConfig *oauth2.Config
 	jwtSecret   []byte
+	guildsCache map[string]guildCacheItem
+	cacheMu     sync.RWMutex
 }
 
 func New(cfg *config.Config, database *db.DB) *API {
@@ -35,6 +38,7 @@ func New(cfg *config.Config, database *db.DB) *API {
 				TokenURL: "https://discord.com/api/oauth2/token",
 			},
 		},
+		guildsCache: make(map[string]guildCacheItem),
 	}
 
 	api.setupRoutes()

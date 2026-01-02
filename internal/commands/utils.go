@@ -13,3 +13,7 @@ func ParseGuildID(guildID string) int64 {
 	}
 	return id
 }
+
+func boolPtr(b bool) *bool {
+	return &b
+}
