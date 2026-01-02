@@ -399,23 +399,18 @@ func parseTime(input string) (time.Time, error) {
 }
 
 func executeScheduledCommand(s *discordgo.Session, svc *nomikai.Service, database *db.DB, channelID, guildIDStr, userID, cmdStr string) {
+	gid, _ := strconv.ParseInt(guildIDStr, 10, 64)
+
+	if ExecuteTextCommand(context.Background(), s, database, gid, channelID, cmdStr) {
+		return
+	}
+
 	parts := strings.Fields(cmdStr)
 	if len(parts) == 0 {
 		return
 	}
 
 	mainCmd := parts[0]
-
-	// Check for custom command (starts with !)
-	if strings.HasPrefix(mainCmd, "!") && len(mainCmd) > 1 {
-		cmdName := mainCmd[1:]
-		gid, _ := strconv.ParseInt(guildIDStr, 10, 64)
-		cmd, err := database.GetCommand(context.Background(), gid, cmdName)
-		if err == nil && cmd != nil {
-			s.ChannelMessageSend(channelID, cmd.Response)
-			return
-		}
-	}
 
 	switch mainCmd {
 	case "nomikai":

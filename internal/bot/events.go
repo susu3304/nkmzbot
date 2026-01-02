@@ -3,7 +3,6 @@ package bot
 import (
 	"context"
 	"log"
-	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -45,21 +44,15 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 }
 
 func (b *Bot) handleTextCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
-	content := strings.TrimSpace(m.Content)
-	if strings.HasPrefix(content, "!") && len(content) > 1 {
-		cmdName := content[1:]
-		if m.GuildID != "" {
-			guildID := commands.ParseGuildID(m.GuildID)
-
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-
-			cmd, err := b.db.GetCommand(ctx, guildID, cmdName)
-			if err == nil && cmd != nil {
-				s.ChannelMessageSend(m.ChannelID, cmd.Response)
-			}
-		}
+	if m.GuildID == "" {
+		return
 	}
+	guildID := commands.ParseGuildID(m.GuildID)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	commands.ExecuteTextCommand(ctx, s, b.db, guildID, m.ChannelID, m.Content)
 }
 
 func (b *Bot) onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
