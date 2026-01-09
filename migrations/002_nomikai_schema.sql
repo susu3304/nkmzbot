@@ -1,3 +1,4 @@
+-- +goose Up
 -- Nomikai (warikan) schema
 
 -- Events
@@ -96,3 +97,32 @@ CREATE TABLE IF NOT EXISTS nomikai_debts (
 );
 CREATE INDEX IF NOT EXISTS idx_nomikai_debts_guild ON nomikai_debts(guild_id);
 CREATE INDEX IF NOT EXISTS idx_nomikai_debts_pair ON nomikai_debts(lender_id, borrower_id);
+
+-- +goose Down
+DROP INDEX IF EXISTS idx_nomikai_debts_pair;
+DROP INDEX IF EXISTS idx_nomikai_debts_guild;
+DROP TABLE IF EXISTS nomikai_debts;
+
+DROP TABLE IF EXISTS nomikai_reminders;
+
+DROP INDEX IF EXISTS idx_nomikai_tasks_pair;
+DROP INDEX IF EXISTS idx_nomikai_tasks_event;
+DROP TABLE IF EXISTS nomikai_settlement_tasks;
+
+DROP TABLE IF EXISTS nomikai_payment_beneficiaries;
+
+DROP INDEX IF EXISTS idx_nomikai_payments_payer;
+DROP INDEX IF EXISTS idx_nomikai_payments_event;
+DROP TABLE IF EXISTS nomikai_payments;
+
+DROP TABLE IF EXISTS nomikai_item_exclusions;
+
+DROP INDEX IF EXISTS idx_nomikai_items_event;
+DROP TABLE IF EXISTS nomikai_items;
+
+DROP INDEX IF EXISTS idx_nomikai_members_event;
+DROP TABLE IF EXISTS nomikai_event_members;
+
+DROP INDEX IF EXISTS uniq_nomikai_events_active_channel;
+DROP INDEX IF EXISTS idx_nomikai_events_guild;
+DROP TABLE IF EXISTS nomikai_events;

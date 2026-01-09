@@ -1,3 +1,4 @@
+-- +goose Up
 -- Settlement payment logs (actual transfers between users)
 CREATE TABLE IF NOT EXISTS nomikai_task_payments (
     id BIGSERIAL PRIMARY KEY,
@@ -16,3 +17,8 @@ CREATE INDEX IF NOT EXISTS idx_nomikai_task_payments_pair ON nomikai_task_paymen
 ALTER TABLE nomikai_reminders
     ALTER COLUMN next_due_at DROP NOT NULL,
     ALTER COLUMN last_sent_at DROP NOT NULL;
+
+-- +goose Down
+DROP INDEX IF EXISTS idx_nomikai_task_payments_pair;
+DROP INDEX IF EXISTS idx_nomikai_task_payments_event;
+DROP TABLE IF EXISTS nomikai_task_payments;

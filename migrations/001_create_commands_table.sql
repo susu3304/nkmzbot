@@ -1,3 +1,4 @@
+-- +goose Up
 -- Create commands table
 CREATE TABLE IF NOT EXISTS commands (
     guild_id BIGINT NOT NULL,
@@ -9,3 +10,7 @@ CREATE TABLE IF NOT EXISTS commands (
 
 -- Create index for better performance
 CREATE INDEX IF NOT EXISTS idx_commands_guild_id ON commands(guild_id);
+
+-- +goose Down
+DROP INDEX IF EXISTS idx_commands_guild_id;
+DROP TABLE IF EXISTS commands;

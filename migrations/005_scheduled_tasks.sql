@@ -1,3 +1,4 @@
+-- +goose Up
 -- Scheduled tasks table for jikan command
 CREATE TABLE IF NOT EXISTS scheduled_tasks (
     id SERIAL PRIMARY KEY,
@@ -13,3 +14,8 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_guild_id ON scheduled_tasks(guild_id);
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_time ON scheduled_tasks(time);
+
+-- +goose Down
+DROP INDEX IF EXISTS idx_scheduled_tasks_time;
+DROP INDEX IF EXISTS idx_scheduled_tasks_guild_id;
+DROP TABLE IF EXISTS scheduled_tasks;

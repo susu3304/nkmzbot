@@ -1,3 +1,4 @@
+-- +goose Up
 -- Guess (GeoGuessr) schema
 
 -- Sessions
@@ -32,3 +33,12 @@ CREATE TABLE IF NOT EXISTS guess_guesses (
 );
 CREATE INDEX IF NOT EXISTS idx_guess_guesses_session ON guess_guesses(session_id);
 CREATE INDEX IF NOT EXISTS idx_guess_guesses_user ON guess_guesses(user_id);
+
+-- +goose Down
+DROP INDEX IF EXISTS idx_guess_guesses_user;
+DROP INDEX IF EXISTS idx_guess_guesses_session;
+DROP TABLE IF EXISTS guess_guesses;
+
+DROP INDEX IF EXISTS idx_guess_sessions_guild;
+DROP INDEX IF EXISTS uniq_guess_sessions_active_channel;
+DROP TABLE IF EXISTS guess_sessions;
