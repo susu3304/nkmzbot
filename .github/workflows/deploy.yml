@@ -1,0 +1,38 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  # タグ作成時にもデプロイ（オプション）
+  # push:
+  #   tags:
+  #     - 'v*'
+
+jobs:
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            cd ${{ secrets.DEPLOY_PATH || '~/workspace/nkmzbot' }}
+            echo "📦 Pulling latest code..."
+            git pull origin main
+            
+            echo "🔨 Rebuilding Docker image..."
+            docker compose build
+            
+            echo "🔄 Restarting bot..."
+            docker compose down
+            docker compose up -d
+            
+            echo "✅ Deployment completed!"
+            docker compose ps
