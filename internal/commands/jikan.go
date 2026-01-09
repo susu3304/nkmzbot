@@ -192,7 +192,7 @@ func handleJikanList(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 	var b strings.Builder
 	b.WriteString("予約コマンド一覧:\n")
-	
+
 	for _, t := range activeTasks {
 		if t.GuildID != gid {
 			continue
@@ -320,7 +320,7 @@ func scheduleTask(s *discordgo.Session, svc *nomikai.Service, database *db.DB, t
 
 func parseTime(input string) (time.Time, error) {
 	now := time.Now().In(jst)
-	
+
 	// Try HH:MM format
 	if t, err := time.ParseInLocation("15:04", input, jst); err == nil {
 		target := time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, jst)
@@ -358,7 +358,7 @@ func executeScheduledCommand(s *discordgo.Session, svc *nomikai.Service, databas
 			return
 		}
 	}
-	
+
 	switch mainCmd {
 	case "nomikai":
 		if len(parts) < 2 {

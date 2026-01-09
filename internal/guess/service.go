@@ -31,29 +31,29 @@ func NewService(database *db.DB) *Service {
 }
 
 type Session struct {
-	ID                 int64
-	ChannelID          string
-	GuildID            int64
-	OrganizerID        string
-	Status             string
-	AnswerLat          *float64
-	AnswerLng          *float64
-	AnswerURL          *string
-	MaxErrorDistance   float64
-	CreatedAt          time.Time
-	ClosedAt           *time.Time
+	ID               int64
+	ChannelID        string
+	GuildID          int64
+	OrganizerID      string
+	Status           string
+	AnswerLat        *float64
+	AnswerLng        *float64
+	AnswerURL        *string
+	MaxErrorDistance float64
+	CreatedAt        time.Time
+	ClosedAt         *time.Time
 }
 
 type Guess struct {
-	ID              int64
-	SessionID       int64
-	UserID          string
-	GuessLat        float64
-	GuessLng        float64
-	GuessURL        string
-	Score           *int
-	DistanceMeters  *float64
-	CreatedAt       time.Time
+	ID             int64
+	SessionID      int64
+	UserID         string
+	GuessLat       float64
+	GuessLng       float64
+	GuessURL       string
+	Score          *int
+	DistanceMeters *float64
+	CreatedAt      time.Time
 }
 
 type GuessResult struct {
