@@ -73,13 +73,13 @@ func (b *Bot) Start() error {
 		return fmt.Errorf("failed to open discord session: %w", err)
 	}
 	log.Println("Discord bot is running")
-	
+
 	// Restore scheduled tasks from database
 	ctx := context.Background()
 	if err := commands.RestoreScheduledTasks(ctx, b.session, b.nomikai, b.db); err != nil {
 		log.Printf("Warning: failed to restore scheduled tasks: %v", err)
 	}
-	
+
 	b.reminder.start()
 	return nil
 }

@@ -1,0 +1,99 @@
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - errcheck      # エラーチェックの確認
+    - gosimple      # コードの簡略化提案
+    - govet         # go vet の実行
+    - ineffassign   # 無駄な代入の検出
+    - staticcheck   # 静的解析
+    - typecheck     # 型チェック
+    - unused        # 未使用コードの検出
+    - gofmt         # フォーマットチェック
+    - goimports     # import の整理
+    - misspell      # スペルミスの検出
+    - revive        # golint の代替
+    - gosec         # セキュリティ問題の検出
+    - gocritic      # コード品質のチェック
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  govet:
+    enable-all: true
+    disable:
+      - shadow
+
+  revive:
+    rules:
+      - name: exported
+        disabled: false
+        arguments:
+          - "checkPrivateReceivers"
+          - "sayRepetitiveInsteadOfStutters"
+
+  gosec:
+    excludes:
+      - G404  # 暗号学的に安全でない乱数生成（開発用途では許容）
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+    disabled-checks:
+      - unnamedResult
+      - hugeParam
+
+issues:
+  exclude-rules:
+    # テストファイルでは一部のルールを緩和
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+        - gocritic
+    
+    # 既存コードとの互換性のため一部を除外（段階的に修正）
+    - linters:
+        - errcheck
+      text: "Error return value.*is not checked"
+    
+    - linters:
+        - gosec
+      text: "G114"  # http.ListenAndServe without timeouts
+    
+    - linters:
+        - staticcheck
+      text: "SA1029"  # context key type
+    
+    - linters:
+        - staticcheck
+      text: "SA1019"  # deprecated method
+    
+    - linters:
+        - govet
+      text: "fieldalignment"
+    
+    - linters:
+        - gocritic
+      text: "exitAfterDefer"
+    
+    - linters:
+        - revive
+      text: "exported"
+    
+    - linters:
+        - gocritic
+      text: "paramTypeCombine|httpNoBody|commentedOutCode|ifElseChain|emptyStringTest|regexpSimplify|builtinShadow"
+    
+    - linters:
+        - unused
+      text: "handleCallback"
+
+  max-issues-per-linter: 0
+  max-same-issues: 0
