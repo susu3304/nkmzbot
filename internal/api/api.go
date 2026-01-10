@@ -6,8 +6,10 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
+	_ "github.com/susu3304/nkmzbot/docs"
 	"github.com/susu3304/nkmzbot/internal/config"
 	"github.com/susu3304/nkmzbot/internal/db"
+	httpSwagger "github.com/swaggo/http-swagger"
 	"golang.org/x/oauth2"
 )
 
@@ -61,6 +63,9 @@ func (a *API) setupRoutes() {
 	protected.HandleFunc("/guilds/{guild_id}/commands/{name}", a.handleUpdateCommand).Methods("PUT")
 	protected.HandleFunc("/guilds/{guild_id}/commands/{name}", a.handleDeleteCommand).Methods("DELETE")
 	protected.HandleFunc("/guilds/{guild_id}/commands/bulk-delete", a.handleBulkDeleteCommands).Methods("POST")
+
+	// Swagger
+	a.router.PathPrefix("/swagger/").Handler(httpSwagger.WrapHandler)
 }
 
 func (a *API) Start() error {

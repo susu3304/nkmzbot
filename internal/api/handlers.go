@@ -8,9 +8,20 @@ import (
 	"strconv"
 
 	"github.com/gorilla/mux"
+	"github.com/susu3304/nkmzbot/internal/db"
 )
 
 // Protected handlers
+
+// @Summary      Get user guilds
+// @Description  Get registered guilds for the authenticated user
+// @Tags         users
+// @Accept       json
+// @Produce      json
+// @Success      200  {array}   DiscordGuild
+// @Failure      502  {string}  string
+// @Failure      500  {string}  string
+// @Router       /api/user/guilds [get]
 func (a *API) handleUserGuilds(w http.ResponseWriter, r *http.Request) {
 	claims := r.Context().Value("claims").(*Claims)
 
@@ -46,6 +57,18 @@ func (a *API) handleUserGuilds(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(filtered)
 }
 
+// @Summary      List commands
+// @Description  List commands for a specific guild
+// @Tags         commands
+// @Accept       json
+// @Produce      json
+// @Param        guild_id  path      int     true  "Guild ID"
+// @Param        q         query     string  false "Search query"
+// @Success      200       {array}   db.Command
+// @Failure      400       {string}  string
+// @Failure      403       {string}  string
+// @Failure      500       {string}  string
+// @Router       /api/guilds/{guild_id}/commands [get]
 func (a *API) handleListCommands(w http.ResponseWriter, r *http.Request) {
 	claims := r.Context().Value("claims").(*Claims)
 	vars := mux.Vars(r)
@@ -62,7 +85,8 @@ func (a *API) handleListCommands(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pattern := r.URL.Query().Get("q")
-	commands, err := a.db.ListCommands(context.Background(), guildID, pattern)
+	var commands []db.Command
+	commands, err = a.db.ListCommands(context.Background(), guildID, pattern)
 	if err != nil {
 		http.Error(w, "failed to list commands", http.StatusInternalServerError)
 		return
@@ -72,6 +96,18 @@ func (a *API) handleListCommands(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(commands)
 }
 
+// @Summary      Add command
+// @Description  Create a new custom command
+// @Tags         commands
+// @Accept       json
+// @Produce      json
+// @Param        guild_id  path      int                true  "Guild ID"
+// @Param        request   body      AddCommandRequest  true  "Command details"
+// @Success      200       {object}  MessageResponse
+// @Failure      400       {string}  string
+// @Failure      403       {string}  string
+// @Failure      500       {string}  string
+// @Router       /api/guilds/{guild_id}/commands [post]
 func (a *API) handleAddCommand(w http.ResponseWriter, r *http.Request) {
 	claims := r.Context().Value("claims").(*Claims)
 	vars := mux.Vars(r)
@@ -87,10 +123,7 @@ func (a *API) handleAddCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req struct {
-		Name     string `json:"name"`
-		Response string `json:"response"`
-	}
+	var req AddCommandRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
@@ -102,11 +135,24 @@ func (a *API) handleAddCommand(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"message": "command added",
+	json.NewEncoder(w).Encode(MessageResponse{
+		Message: "command added",
 	})
 }
 
+// @Summary      Update command
+// @Description  Update an existing custom command
+// @Tags         commands
+// @Accept       json
+// @Produce      json
+// @Param        guild_id  path      int                   true  "Guild ID"
+// @Param        name      path      string                true  "Command name"
+// @Param        request   body      UpdateCommandRequest  true  "Command details"
+// @Success      200       {object}  MessageResponse
+// @Failure      400       {string}  string
+// @Failure      403       {string}  string
+// @Failure      500       {string}  string
+// @Router       /api/guilds/{guild_id}/commands/{name} [put]
 func (a *API) handleUpdateCommand(w http.ResponseWriter, r *http.Request) {
 	claims := r.Context().Value("claims").(*Claims)
 	vars := mux.Vars(r)
@@ -123,9 +169,7 @@ func (a *API) handleUpdateCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req struct {
-		Response string `json:"response"`
-	}
+	var req UpdateCommandRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
@@ -137,11 +181,23 @@ func (a *API) handleUpdateCommand(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"message": "command updated",
+	json.NewEncoder(w).Encode(MessageResponse{
+		Message: "command updated",
 	})
 }
 
+// @Summary      Delete command
+// @Description  Delete a custom command
+// @Tags         commands
+// @Accept       json
+// @Produce      json
+// @Param        guild_id  path      int     true  "Guild ID"
+// @Param        name      path      string  true  "Command name"
+// @Success      200       {object}  MessageResponse
+// @Failure      400       {string}  string
+// @Failure      403       {string}  string
+// @Failure      500       {string}  string
+// @Router       /api/guilds/{guild_id}/commands/{name} [delete]
 func (a *API) handleDeleteCommand(w http.ResponseWriter, r *http.Request) {
 	claims := r.Context().Value("claims").(*Claims)
 	vars := mux.Vars(r)
@@ -164,11 +220,23 @@ func (a *API) handleDeleteCommand(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"message": "command deleted",
+	json.NewEncoder(w).Encode(MessageResponse{
+		Message: "command deleted",
 	})
 }
 
+// @Summary      Bulk delete commands
+// @Description  Delete multiple custom commands
+// @Tags         commands
+// @Accept       json
+// @Produce      json
+// @Param        guild_id  path      int                true  "Guild ID"
+// @Param        request   body      BulkDeleteRequest  true  "Commands to delete"
+// @Success      200       {object}  BulkDeleteResponse
+// @Failure      400       {string}  string
+// @Failure      403       {string}  string
+// @Failure      500       {string}  string
+// @Router       /api/guilds/{guild_id}/commands/bulk-delete [post]
 func (a *API) handleBulkDeleteCommands(w http.ResponseWriter, r *http.Request) {
 	claims := r.Context().Value("claims").(*Claims)
 	vars := mux.Vars(r)
@@ -184,9 +252,7 @@ func (a *API) handleBulkDeleteCommands(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req struct {
-		Names []string `json:"names"`
-	}
+	var req BulkDeleteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
@@ -203,13 +269,10 @@ func (a *API) handleBulkDeleteCommands(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	response := map[string]interface{}{
-		"deleted": successCount,
-	}
-	if len(errors) > 0 {
-		response["errors"] = errors
-	}
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(BulkDeleteResponse{
+		Deleted: successCount,
+		Errors:  errors,
+	})
 }
 
 // Web page handlers
@@ -715,4 +778,28 @@ func (a *API) userHasGuildAccess(accessToken string, guildID int64) bool {
 		}
 	}
 	return false
+}
+
+// Request/Response types for Swagger
+
+type AddCommandRequest struct {
+	Name     string `json:"name"`
+	Response string `json:"response"`
+}
+
+type UpdateCommandRequest struct {
+	Response string `json:"response"`
+}
+
+type BulkDeleteRequest struct {
+	Names []string `json:"names"`
+}
+
+type MessageResponse struct {
+	Message string `json:"message"`
+}
+
+type BulkDeleteResponse struct {
+	Deleted int      `json:"deleted"`
+	Errors  []string `json:"errors,omitempty"`
 }

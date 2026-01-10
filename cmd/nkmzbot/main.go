@@ -13,6 +13,11 @@ import (
 	"github.com/susu3304/nkmzbot/internal/db"
 )
 
+// @title           NKMZBot API
+// @version         1.0
+// @description     This is the API server for NKMZBot.
+// @host            localhost:3000
+// @BasePath        /
 func main() {
 	// Load configuration
 	cfg, err := config.Load()

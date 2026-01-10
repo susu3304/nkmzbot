@@ -1,0 +1,283 @@
+basePath: /
+definitions:
+  github_com_susu3304_nkmzbot_internal_db.Command:
+    properties:
+      guild_id:
+        type: integer
+      name:
+        type: string
+      response:
+        type: string
+    type: object
+  internal_api.AddCommandRequest:
+    properties:
+      name:
+        type: string
+      response:
+        type: string
+    type: object
+  internal_api.BulkDeleteRequest:
+    properties:
+      names:
+        items:
+          type: string
+        type: array
+    type: object
+  internal_api.BulkDeleteResponse:
+    properties:
+      deleted:
+        type: integer
+      errors:
+        items:
+          type: string
+        type: array
+    type: object
+  internal_api.DiscordGuild:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      owner:
+        type: boolean
+    type: object
+  internal_api.MessageResponse:
+    properties:
+      message:
+        type: string
+    type: object
+  internal_api.UpdateCommandRequest:
+    properties:
+      response:
+        type: string
+    type: object
+host: localhost:3000
+info:
+  contact: {}
+  description: This is the API server for NKMZBot.
+  title: NKMZBot API
+  version: "1.0"
+paths:
+  /api/guilds/{guild_id}/commands:
+    get:
+      consumes:
+      - application/json
+      description: List commands for a specific guild
+      parameters:
+      - description: Guild ID
+        in: path
+        name: guild_id
+        required: true
+        type: integer
+      - description: Search query
+        in: query
+        name: q
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_susu3304_nkmzbot_internal_db.Command'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "403":
+          description: Forbidden
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: List commands
+      tags:
+      - commands
+    post:
+      consumes:
+      - application/json
+      description: Create a new custom command
+      parameters:
+      - description: Guild ID
+        in: path
+        name: guild_id
+        required: true
+        type: integer
+      - description: Command details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.AddCommandRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "403":
+          description: Forbidden
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Add command
+      tags:
+      - commands
+  /api/guilds/{guild_id}/commands/{name}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a custom command
+      parameters:
+      - description: Guild ID
+        in: path
+        name: guild_id
+        required: true
+        type: integer
+      - description: Command name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "403":
+          description: Forbidden
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Delete command
+      tags:
+      - commands
+    put:
+      consumes:
+      - application/json
+      description: Update an existing custom command
+      parameters:
+      - description: Guild ID
+        in: path
+        name: guild_id
+        required: true
+        type: integer
+      - description: Command name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Command details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.UpdateCommandRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "403":
+          description: Forbidden
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Update command
+      tags:
+      - commands
+  /api/guilds/{guild_id}/commands/bulk-delete:
+    post:
+      consumes:
+      - application/json
+      description: Delete multiple custom commands
+      parameters:
+      - description: Guild ID
+        in: path
+        name: guild_id
+        required: true
+        type: integer
+      - description: Commands to delete
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api.BulkDeleteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api.BulkDeleteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "403":
+          description: Forbidden
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Bulk delete commands
+      tags:
+      - commands
+  /api/user/guilds:
+    get:
+      consumes:
+      - application/json
+      description: Get registered guilds for the authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_api.DiscordGuild'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+        "502":
+          description: Bad Gateway
+          schema:
+            type: string
+      summary: Get user guilds
+      tags:
+      - users
+swagger: "2.0"
