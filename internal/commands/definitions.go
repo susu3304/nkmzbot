@@ -56,6 +56,19 @@ func GetCommands() []*discordgo.ApplicationCommand {
 			},
 		},
 		{
+			Name:         "addbulk",
+			Description:  "複数のコマンドを一括で追加します",
+			DMPermission: boolPtr(false),
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "commands",
+					Description: "コマンドリスト（形式: !cmd1: content1 改行 !cmd2: content2 ...）",
+					Required:    true,
+				},
+			},
+		},
+		{
 			Name:         "jikan",
 			Description:  "スケジュール実行を管理します",
 			DMPermission: boolPtr(false),

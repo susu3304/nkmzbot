@@ -153,6 +153,8 @@ func (b *Bot) handleApplicationCommand(s *discordgo.Session, i *discordgo.Intera
 	switch data.Name {
 	case "add":
 		commands.HandleAdd(s, i, b.db)
+	case "addbulk":
+		commands.HandleAddBulk(s, i, b.db)
 	case "remove":
 		commands.HandleRemove(s, i, b.db)
 	case "update":
