@@ -3,18 +3,17 @@ package db
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
-	"sort"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
 )
 
 type DB struct {
-	pool *pgxpool.Pool
+	pool        *pgxpool.Pool
+	databaseURL string
 }
 
 func New(ctx context.Context, databaseURL string) (*DB, error) {
@@ -28,7 +27,10 @@ func New(ctx context.Context, databaseURL string) (*DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	return &DB{pool: pool}, nil
+	return &DB{
+		pool:        pool,
+		databaseURL: databaseURL,
+	}, nil
 }
 
 func (db *DB) Close() {
@@ -50,56 +52,40 @@ func (db *DB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx
 	return db.pool.QueryRow(ctx, sql, args...)
 }
 
-// RunMigrations runs database migrations
+// RunMigrations runs database migrations using pressly/goose
 func (db *DB) RunMigrations(ctx context.Context) error {
-	// Load and execute all .sql files under ./migrations in lexical order
+	// Goose requires a *sql.DB.
+	// We open a temporary connection using pgx stdlib adapter for migration purposes.
+	// Since we already have the connection string, we can use sql.Open with "pgx".
+	// Make sure "github.com/jackc/pgx/v5/stdlib" is imported for side-effects if we used "pgx" driver name,
+	// but here we can't rely on driver registration without side-effect import.
+	// Actually stdlib.OpenDB works with a config, but sql.Open works with a string.
+	// To keep it simple and reuse the URL string:
+
+	connConfig, err := pgx.ParseConfig(db.databaseURL)
+	if err != nil {
+		return fmt.Errorf("failed to parse config for migrations: %w", err)
+	}
+
+	// Open a standard library database connection
+	sqldb := stdlib.OpenDB(*connConfig)
+	defer sqldb.Close()
+
+	if err := sqldb.PingContext(ctx); err != nil {
+		return fmt.Errorf("failed to ping standard lib db: %w", err)
+	}
+
+	// Set migration directory
 	migrationsDir := "./migrations"
 
-	entries, err := os.ReadDir(migrationsDir)
-	if err != nil {
-		return fmt.Errorf("failed to read migrations dir: %w", err)
+	// Configure goose
+	if err := goose.SetDialect("postgres"); err != nil {
+		return fmt.Errorf("failed to set goose dialect: %w", err)
 	}
 
-	var files []string
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
-		if strings.HasSuffix(strings.ToLower(name), ".sql") {
-			files = append(files, filepath.Join(migrationsDir, name))
-		}
-	}
-
-	sort.Strings(files)
-
-	for _, file := range files {
-		contentBytes, err := os.ReadFile(file)
-		if err != nil {
-			return fmt.Errorf("failed to read migration %s: %w", file, err)
-		}
-
-		sqlText := strings.TrimSpace(string(contentBytes))
-		// Only run the "Up" migration
-		parts := strings.SplitN(sqlText, "-- +goose Down", 2)
-		sqlText = strings.TrimSpace(parts[0])
-
-		if sqlText == "" {
-			continue
-		}
-
-		tx, err := db.pool.Begin(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to begin tx for %s: %w", file, err)
-		}
-		if _, execErr := tx.Exec(ctx, sqlText); execErr != nil {
-			_ = tx.Rollback(ctx)
-			return fmt.Errorf("failed to execute migration %s: %w", file, execErr)
-		}
-		if err := tx.Commit(ctx); err != nil {
-			_ = tx.Rollback(ctx)
-			return fmt.Errorf("failed to commit migration %s: %w", file, err)
-		}
+	// Run migrations
+	if err := goose.UpContext(ctx, sqldb, migrationsDir); err != nil {
+		return fmt.Errorf("failed to run goose up: %w", err)
 	}
 
 	return nil
