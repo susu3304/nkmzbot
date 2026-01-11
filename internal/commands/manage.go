@@ -152,12 +152,18 @@ func HandleAddBulk(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.
 	})
 }
 
+// BulkCommand represents a command to be added in bulk
+type BulkCommand struct {
+	Name     string
+	Response string
+}
+
 // parseBulkCommands parses a multi-line string in the format:
 // !cmd1: content1
 // !cmd2: content2
 // !cmd3: content3
-func parseBulkCommands(text string) []struct{ Name, Response string } {
-	var commands []struct{ Name, Response string }
+func parseBulkCommands(text string) []BulkCommand {
+	var commands []BulkCommand
 	lines := strings.Split(text, "\n")
 
 	for _, line := range lines {
@@ -184,7 +190,7 @@ func parseBulkCommands(text string) []struct{ Name, Response string } {
 		response := strings.TrimSpace(line[colonIndex+1:])
 
 		if name != "" && response != "" {
-			commands = append(commands, struct{ Name, Response string }{
+			commands = append(commands, BulkCommand{
 				Name:     name,
 				Response: response,
 			})

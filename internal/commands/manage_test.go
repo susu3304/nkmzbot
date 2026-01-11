@@ -8,12 +8,12 @@ func TestParseBulkCommands(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
-		want  []struct{ Name, Response string }
+		want  []BulkCommand
 	}{
 		{
 			name:  "Single command",
 			input: "!hello: Hello, world!",
-			want: []struct{ Name, Response string }{
+			want: []BulkCommand{
 				{Name: "hello", Response: "Hello, world!"},
 			},
 		},
@@ -22,7 +22,7 @@ func TestParseBulkCommands(t *testing.T) {
 			input: `!hello: Hello, world!
 !bye: Goodbye!
 !test: This is a test`,
-			want: []struct{ Name, Response string }{
+			want: []BulkCommand{
 				{Name: "hello", Response: "Hello, world!"},
 				{Name: "bye", Response: "Goodbye!"},
 				{Name: "test", Response: "This is a test"},
@@ -33,7 +33,7 @@ func TestParseBulkCommands(t *testing.T) {
 			input: `  !hello:   Hello, world!  
 !bye:Goodbye!
   !test: This is a test  `,
-			want: []struct{ Name, Response string }{
+			want: []BulkCommand{
 				{Name: "hello", Response: "Hello, world!"},
 				{Name: "bye", Response: "Goodbye!"},
 				{Name: "test", Response: "This is a test"},
@@ -46,7 +46,7 @@ func TestParseBulkCommands(t *testing.T) {
 !bye: Goodbye!
 
 !test: This is a test`,
-			want: []struct{ Name, Response string }{
+			want: []BulkCommand{
 				{Name: "hello", Response: "Hello, world!"},
 				{Name: "bye", Response: "Goodbye!"},
 				{Name: "test", Response: "This is a test"},
@@ -56,7 +56,7 @@ func TestParseBulkCommands(t *testing.T) {
 			name: "Commands with colon in response",
 			input: `!hello: Hello: world!
 !time: The time is: 12:30`,
-			want: []struct{ Name, Response string }{
+			want: []BulkCommand{
 				{Name: "hello", Response: "Hello: world!"},
 				{Name: "time", Response: "The time is: 12:30"},
 			},
@@ -64,22 +64,22 @@ func TestParseBulkCommands(t *testing.T) {
 		{
 			name:  "Invalid: missing colon",
 			input: "!hello world",
-			want:  []struct{ Name, Response string }{},
+			want:  []BulkCommand{},
 		},
 		{
 			name:  "Invalid: missing exclamation mark",
 			input: "hello: world",
-			want:  []struct{ Name, Response string }{},
+			want:  []BulkCommand{},
 		},
 		{
 			name:  "Invalid: empty name",
 			input: "!: world",
-			want:  []struct{ Name, Response string }{},
+			want:  []BulkCommand{},
 		},
 		{
 			name:  "Invalid: empty response",
 			input: "!hello:",
-			want:  []struct{ Name, Response string }{},
+			want:  []BulkCommand{},
 		},
 		{
 			name: "Mixed valid and invalid",
@@ -88,7 +88,7 @@ invalid line
 !bye: Goodbye!
 another invalid
 !test: This is a test`,
-			want: []struct{ Name, Response string }{
+			want: []BulkCommand{
 				{Name: "hello", Response: "Hello, world!"},
 				{Name: "bye", Response: "Goodbye!"},
 				{Name: "test", Response: "This is a test"},
@@ -97,12 +97,12 @@ another invalid
 		{
 			name:  "Empty input",
 			input: "",
-			want:  []struct{ Name, Response string }{},
+			want:  []BulkCommand{},
 		},
 		{
 			name:  "Only whitespace",
 			input: "   \n  \n  ",
-			want:  []struct{ Name, Response string }{},
+			want:  []BulkCommand{},
 		},
 	}
 
