@@ -80,6 +80,10 @@ func (db *DB) RunMigrations(ctx context.Context) error {
 		}
 
 		sqlText := strings.TrimSpace(string(contentBytes))
+		// Only run the "Up" migration
+		parts := strings.SplitN(sqlText, "-- +goose Down", 2)
+		sqlText = strings.TrimSpace(parts[0])
+
 		if sqlText == "" {
 			continue
 		}
