@@ -157,11 +157,12 @@ func HandleGuess(s *discordgo.Session, i *discordgo.InteractionCreate, svc *gues
 		for idx, r := range results {
 			rank := idx + 1
 			emoji := ""
-			if rank == 1 {
+			switch rank {
+			case 1:
 				emoji = "🥇"
-			} else if rank == 2 {
+			case 2:
 				emoji = "🥈"
-			} else if rank == 3 {
+			case 3:
 				emoji = "🥉"
 			}
 			fmt.Fprintf(&b, "%s %d位: %5d点 (%s)\n", emoji, rank, r.Score, guess.FormatDistance(r.DistanceMeters))

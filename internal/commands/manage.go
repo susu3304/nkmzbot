@@ -15,9 +15,10 @@ func HandleAdd(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client
 	options := data.Options
 	var name, response string
 	for _, opt := range options {
-		if opt.Name == "name" {
+		switch opt.Name {
+		case "name":
 			name = opt.StringValue()
-		} else if opt.Name == "response" {
+		case "response":
 			response = opt.StringValue()
 		}
 	}
@@ -73,9 +74,10 @@ func HandleUpdate(s *discordgo.Session, i *discordgo.InteractionCreate, cli *cli
 	options := data.Options
 	var name, response string
 	for _, opt := range options {
-		if opt.Name == "name" {
+		switch opt.Name {
+		case "name":
 			name = opt.StringValue()
-		} else if opt.Name == "response" {
+		case "response":
 			response = opt.StringValue()
 		}
 	}
@@ -134,9 +136,9 @@ func HandleAddBulk(s *discordgo.Session, i *discordgo.InteractionCreate, cli *cl
 	err := cli.AddBulkCommands(guildID, bulkInputs)
 	var content string
 	if err != nil {
-		content = fmt.Sprintf("❌ コマンドの追加に失敗しました。")
+		content = "❌ コマンドの追加に失敗しました。"
 	} else {
-		content = fmt.Sprintf("✅ コマンドを追加しました。")
+		content = "✅ コマンドを追加しました。"
 	}
 
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
