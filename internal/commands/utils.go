@@ -13,3 +13,5 @@ func ParseGuildID(guildID string) int64 {
 	}
 	return id
 }
+
+const apiConnectionErrorMessage = "APIと接続できませんでした。時間をおいて再試行してください。"

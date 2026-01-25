@@ -113,7 +113,11 @@ func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, cli
 	err = cli.AddCommand(guildID, commandName, responseContent)
 	var content string
 	if err != nil {
-		content = "登録に失敗しました。同じ名前のコマンドが既に存在するかもしれません。"
+		if client.IsConnectionError(err) {
+			content = apiConnectionErrorMessage
+		} else {
+			content = "登録に失敗しました。同じ名前のコマンドが既に存在するかもしれません。"
+		}
 	} else {
 		content = "メッセージの内容をコマンド '" + commandName + "' の返答として登録しました！"
 	}

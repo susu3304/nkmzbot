@@ -26,7 +26,11 @@ func HandleAdd(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client
 	err := cli.AddCommand(guildID, name, response)
 	var content string
 	if err != nil {
-		content = "追加に失敗しました。"
+		if client.IsConnectionError(err) {
+			content = apiConnectionErrorMessage
+		} else {
+			content = "追加に失敗しました。"
+		}
 	} else {
 		content = fmt.Sprintf("コマンド '%s' を追加しました。", name)
 	}
@@ -54,7 +58,11 @@ func HandleRemove(s *discordgo.Session, i *discordgo.InteractionCreate, cli *cli
 	err := cli.RemoveCommand(guildID, name)
 	var content string
 	if err != nil {
-		content = "そのコマンドは存在しません。"
+		if client.IsConnectionError(err) {
+			content = apiConnectionErrorMessage
+		} else {
+			content = "そのコマンドは存在しません。"
+		}
 	} else {
 		content = fmt.Sprintf("コマンド '%s' を削除しました。", name)
 	}
@@ -85,7 +93,11 @@ func HandleUpdate(s *discordgo.Session, i *discordgo.InteractionCreate, cli *cli
 	err := cli.UpdateCommand(guildID, name, response)
 	var content string
 	if err != nil {
-		content = "そのコマンドは存在しません。"
+		if client.IsConnectionError(err) {
+			content = apiConnectionErrorMessage
+		} else {
+			content = "そのコマンドは存在しません。"
+		}
 	} else {
 		content = fmt.Sprintf("コマンド '%s' を更新しました。", name)
 	}
@@ -136,7 +148,11 @@ func HandleAddBulk(s *discordgo.Session, i *discordgo.InteractionCreate, cli *cl
 	err := cli.AddBulkCommands(guildID, bulkInputs)
 	var content string
 	if err != nil {
-		content = "❌ コマンドの追加に失敗しました。"
+		if client.IsConnectionError(err) {
+			content = apiConnectionErrorMessage
+		} else {
+			content = "❌ コマンドの追加に失敗しました。"
+		}
 	} else {
 		content = "✅ コマンドを追加しました。"
 	}

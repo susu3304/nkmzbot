@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,12 @@ type Client struct {
 	BaseURL    string
 	Token      string
 	HTTPClient *http.Client
+}
+
+var ErrConnection = errors.New("api connection failed")
+
+func IsConnectionError(err error) bool {
+	return errors.Is(err, ErrConnection)
 }
 
 func New(baseURL, token string) *Client {
@@ -47,7 +54,11 @@ func (c *Client) doRequest(method, path string, body interface{}) (*http.Respons
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
 
-	return c.HTTPClient.Do(req)
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrConnection, err)
+	}
+	return resp, nil
 }
 
 type apiErrorResponse struct {
