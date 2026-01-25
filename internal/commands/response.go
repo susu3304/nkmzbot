@@ -1,13 +1,12 @@
 package commands
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/susu3304/nkmzbot/internal/db"
+	"github.com/susu3304/nkmzbot/internal/client"
 )
 
 func HandleRegisterAsResponse(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -59,13 +58,13 @@ func HandleRegisterAsResponse(s *discordgo.Session, i *discordgo.InteractionCrea
 	}
 }
 
-func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.DB) {
+func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client.Client) {
 	data := i.ModalSubmitData()
 	if !strings.HasPrefix(data.CustomID, "reg_resp:") {
 		return
 	}
 
-	guildID := ParseGuildID(i.GuildID)
+	guildID := i.GuildID
 	messageID := strings.TrimPrefix(data.CustomID, "reg_resp:")
 
 	// Get command name from modal
@@ -111,8 +110,8 @@ func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db 
 		responseContent += attachment.URL
 	}
 
-	// Add command to database
-	err = db.AddCommand(context.Background(), guildID, commandName, responseContent)
+	// Add command to using API
+	err = cli.AddCommand(guildID, commandName, responseContent)
 	var content string
 	if err != nil {
 		content = "登録に失敗しました。同じ名前のコマンドが既に存在するかもしれません。"

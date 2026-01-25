@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/susu3304/nkmzbot/internal/client"
 	"github.com/susu3304/nkmzbot/internal/commands"
 	"github.com/susu3304/nkmzbot/internal/db"
 	"github.com/susu3304/nkmzbot/internal/guess"
@@ -18,12 +19,13 @@ import (
 type Bot struct {
 	session  *discordgo.Session
 	db       *db.DB
+	client   *client.Client
 	nomikai  *nomikai.Service
 	guess    *guess.Service
 	reminder *reminderWorker
 }
 
-func New(token string, database *db.DB) (*Bot, error) {
+func New(token, apiURL, apiToken string, database *db.DB) (*Bot, error) {
 	session, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create discord session: %w", err)
@@ -52,6 +54,7 @@ func New(token string, database *db.DB) (*Bot, error) {
 	bot := &Bot{
 		session: session,
 		db:      database,
+		client:  client.New(apiURL, apiToken),
 		nomikai: nomikai.NewService(database),
 		guess:   guess.NewService(database),
 	}
@@ -76,7 +79,7 @@ func (b *Bot) Start() error {
 
 	// Restore scheduled tasks from database
 	ctx := context.Background()
-	if err := commands.RestoreScheduledTasks(ctx, b.session, b.nomikai, b.db); err != nil {
+	if err := commands.RestoreScheduledTasks(ctx, b.session, b.nomikai, b.db, b.client); err != nil {
 		log.Printf("Warning: failed to restore scheduled tasks: %v", err)
 	}
 

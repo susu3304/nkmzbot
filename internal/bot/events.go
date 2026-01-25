@@ -51,10 +51,9 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 	if strings.HasPrefix(content, "!") && len(content) > 1 {
 		cmdName := content[1:]
 		if m.GuildID != "" {
-			guildID := commands.ParseGuildID(m.GuildID)
-			cmd, err := b.db.GetCommand(context.Background(), guildID, cmdName)
-			if err == nil && cmd != nil {
-				s.ChannelMessageSend(m.ChannelID, cmd.Response)
+			resp, err := b.client.GetCommandResponse(m.GuildID, cmdName)
+			if err == nil && resp != "" {
+				s.ChannelMessageSend(m.ChannelID, resp)
 			}
 		}
 	}
@@ -152,26 +151,26 @@ func (b *Bot) handleApplicationCommand(s *discordgo.Session, i *discordgo.Intera
 
 	switch data.Name {
 	case "add":
-		commands.HandleAdd(s, i, b.db)
+		commands.HandleAdd(s, i, b.client)
 	case "addbulk":
-		commands.HandleAddBulk(s, i, b.db)
+		commands.HandleAddBulk(s, i, b.client)
 	case "remove":
-		commands.HandleRemove(s, i, b.db)
+		commands.HandleRemove(s, i, b.client)
 	case "update":
-		commands.HandleUpdate(s, i, b.db)
+		commands.HandleUpdate(s, i, b.client)
 	case "list":
-		commands.HandleList(s, i, b.db)
+		commands.HandleList(s, i, b.client)
 	case "nomikai":
 		commands.HandleNomikai(s, i, b.nomikai)
 	case "guess":
 		commands.HandleGuess(s, i, b.guess)
 	case "jikan":
-		commands.HandleJikan(s, i, b.nomikai, b.db)
+		commands.HandleJikan(s, i, b.nomikai, b.db, b.client)
 	case "Register as Response":
 		commands.HandleRegisterAsResponse(s, i)
 	}
 }
 
 func (b *Bot) handleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	commands.HandleModalSubmit(s, i, b.db)
+	commands.HandleModalSubmit(s, i, b.client)
 }

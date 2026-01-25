@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/susu3304/nkmzbot/internal/client"
 	"github.com/susu3304/nkmzbot/internal/db"
 	"github.com/susu3304/nkmzbot/internal/nomikai"
 )
@@ -33,7 +34,7 @@ var (
 )
 
 // RestoreScheduledTasks loads all scheduled tasks from the database and schedules them
-func RestoreScheduledTasks(ctx context.Context, s *discordgo.Session, svc *nomikai.Service, database *db.DB) error {
+func RestoreScheduledTasks(ctx context.Context, s *discordgo.Session, svc *nomikai.Service, database *db.DB, cli *client.Client) error {
 	dbTasks, err := database.ListAllScheduledTasks(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to load scheduled tasks: %w", err)
@@ -77,14 +78,14 @@ func RestoreScheduledTasks(ctx context.Context, s *discordgo.Session, svc *nomik
 			UserID:    dbTask.UserID,
 		}
 		activeTasks[task.ID] = task
-		go scheduleTask(s, svc, database, task)
+		go scheduleTask(s, svc, database, cli, task)
 	}
 
 	log.Printf("Restored %d scheduled tasks", len(activeTasks))
 	return nil
 }
 
-func HandleJikan(s *discordgo.Session, i *discordgo.InteractionCreate, svc *nomikai.Service, database *db.DB) {
+func HandleJikan(s *discordgo.Session, i *discordgo.InteractionCreate, svc *nomikai.Service, database *db.DB, cli *client.Client) {
 	options := i.ApplicationCommandData().Options
 	if len(options) == 0 {
 		respondText(s, i, "サブコマンドを指定してください")
@@ -95,7 +96,7 @@ func HandleJikan(s *discordgo.Session, i *discordgo.InteractionCreate, svc *nomi
 
 	switch subCmd.Name {
 	case "add":
-		handleJikanAdd(s, i, subCmd.Options, svc, database)
+		handleJikanAdd(s, i, subCmd.Options, svc, database, cli)
 	case "list":
 		handleJikanList(s, i)
 	case "delete":
@@ -103,7 +104,7 @@ func HandleJikan(s *discordgo.Session, i *discordgo.InteractionCreate, svc *nomi
 	}
 }
 
-func handleJikanAdd(s *discordgo.Session, i *discordgo.InteractionCreate, options []*discordgo.ApplicationCommandInteractionDataOption, svc *nomikai.Service, database *db.DB) {
+func handleJikanAdd(s *discordgo.Session, i *discordgo.InteractionCreate, options []*discordgo.ApplicationCommandInteractionDataOption, svc *nomikai.Service, database *db.DB, cli *client.Client) {
 	cmdStr := getStringOption(options, "command")
 	timeStr := getStringOption(options, "time")
 	repeatOpt := getBoolOption(options, "repeat")
@@ -163,7 +164,7 @@ func handleJikanAdd(s *discordgo.Session, i *discordgo.InteractionCreate, option
 	activeTasks[dbTask.ID] = task
 	tasksMu.Unlock()
 
-	scheduleTask(s, svc, database, task)
+	scheduleTask(s, svc, database, cli, task)
 
 	// Display time in JST for user
 	jstTime := targetTime.In(jst)
@@ -272,7 +273,7 @@ func getIntegerOption(opts []*discordgo.ApplicationCommandInteractionDataOption,
 	return nil
 }
 
-func scheduleTask(s *discordgo.Session, svc *nomikai.Service, database *db.DB, task *activeTask) {
+func scheduleTask(s *discordgo.Session, svc *nomikai.Service, database *db.DB, cli *client.Client, task *activeTask) {
 	now := time.Now()
 	duration := task.Time.Sub(now)
 
@@ -284,7 +285,7 @@ func scheduleTask(s *discordgo.Session, svc *nomikai.Service, database *db.DB, t
 	time.AfterFunc(duration, func() {
 		// Execute
 		guildIDStr := strconv.FormatInt(task.GuildID, 10)
-		executeScheduledCommand(s, svc, database, task.ChannelID, guildIDStr, task.UserID, task.Command)
+		executeScheduledCommand(s, svc, database, cli, task.ChannelID, guildIDStr, task.UserID, task.Command)
 
 		tasksMu.Lock()
 		defer tasksMu.Unlock()
@@ -306,7 +307,7 @@ func scheduleTask(s *discordgo.Session, svc *nomikai.Service, database *db.DB, t
 				log.Printf("Failed to update scheduled task time: %v", err)
 				return
 			}
-			go scheduleTask(s, svc, database, task)
+			go scheduleTask(s, svc, database, cli, task)
 		} else {
 			// Remove from database
 			if err := database.DeleteScheduledTask(ctx, task.ID); err != nil {
@@ -340,7 +341,7 @@ func parseTime(input string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("unsupported format")
 }
 
-func executeScheduledCommand(s *discordgo.Session, svc *nomikai.Service, database *db.DB, channelID, guildIDStr, userID, cmdStr string) {
+func executeScheduledCommand(s *discordgo.Session, svc *nomikai.Service, database *db.DB, cli *client.Client, channelID, guildIDStr, userID, cmdStr string) {
 	parts := strings.Fields(cmdStr)
 	if len(parts) == 0 {
 		return
@@ -351,10 +352,10 @@ func executeScheduledCommand(s *discordgo.Session, svc *nomikai.Service, databas
 	// Check for custom command (starts with !)
 	if strings.HasPrefix(mainCmd, "!") && len(mainCmd) > 1 {
 		cmdName := mainCmd[1:]
-		gid, _ := strconv.ParseInt(guildIDStr, 10, 64)
-		cmd, err := database.GetCommand(context.Background(), gid, cmdName)
-		if err == nil && cmd != nil {
-			s.ChannelMessageSend(channelID, cmd.Response)
+		// Use API client instead of DB
+		resp, err := cli.GetCommandResponse(guildIDStr, cmdName)
+		if err == nil && resp != "" {
+			s.ChannelMessageSend(channelID, resp)
 			return
 		}
 	}

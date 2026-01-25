@@ -1,17 +1,16 @@
 package commands
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/susu3304/nkmzbot/internal/db"
+	"github.com/susu3304/nkmzbot/internal/client"
 )
 
-func HandleList(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.DB) {
-	guildID := ParseGuildID(i.GuildID)
-	commands, err := db.ListCommands(context.Background(), guildID, "")
+func HandleList(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client.Client) {
+	guildID := i.GuildID
+	commands, err := cli.ListCommands(guildID)
 	if err != nil || len(commands) == 0 {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
