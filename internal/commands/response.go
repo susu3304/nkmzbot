@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"fmt"
 	"log"
 	"strings"
 
@@ -30,7 +29,7 @@ func HandleRegisterAsResponse(s *discordgo.Session, i *discordgo.InteractionCrea
 	}
 
 	// Show modal to get command name
-	customID := fmt.Sprintf("reg_resp:%s", message.ID)
+	customID := "reg_resp:" + message.ID
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseModal,
 		Data: &discordgo.InteractionResponseData{
@@ -116,7 +115,7 @@ func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, cli
 	if err != nil {
 		content = "登録に失敗しました。同じ名前のコマンドが既に存在するかもしれません。"
 	} else {
-		content = fmt.Sprintf("メッセージの内容をコマンド '%s' の返答として登録しました！", commandName)
+		content = "メッセージの内容をコマンド '" + commandName + "' の返答として登録しました！"
 	}
 
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
