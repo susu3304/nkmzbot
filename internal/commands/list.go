@@ -11,7 +11,20 @@ import (
 func HandleList(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client.Client) {
 	guildID := i.GuildID
 	commands, err := cli.ListCommands(guildID)
-	if err != nil || len(commands) == 0 {
+	if err != nil {
+		content := "コマンド一覧の取得に失敗しました。"
+		if client.IsConnectionError(err) {
+			content = apiConnectionErrorMessage
+		}
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: content,
+			},
+		})
+		return
+	}
+	if len(commands) == 0 {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{

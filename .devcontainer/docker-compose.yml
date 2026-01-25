@@ -10,11 +10,7 @@ services:
       - go-mod-cache:/go/pkg/mod
     environment:
       # devcontainer 内でアクセスできるように上書き
-      - WEB_BIND=0.0.0.0:3000
       - DATABASE_URL=postgres://postgres:postgres@db:5432/postgres
-      - DISCORD_REDIRECT_URI=http://localhost:3000/oauth/callback
-    ports:
-      - "3000:3000"
     depends_on:
       - db
 

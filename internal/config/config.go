@@ -11,19 +11,8 @@ type Config struct {
 	// Discord Bot
 	DiscordToken string
 
-	// Discord OAuth2
-	DiscordClientID     string
-	DiscordClientSecret string
-	DiscordRedirectURI  string
-
 	// Database
 	DatabaseURL string
-
-	// Web Server
-	WebBind string
-
-	// Session
-	JWTSecret string
 
 	// API
 	APIURL   string
@@ -35,15 +24,10 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		DiscordToken:        os.Getenv("DISCORD_TOKEN"),
-		DatabaseURL:         os.Getenv("DATABASE_URL"),
-		WebBind:             getEnvDefault("WEB_BIND", "0.0.0.0:3000"),
-		DiscordClientID:     os.Getenv("DISCORD_CLIENT_ID"),
-		DiscordClientSecret: os.Getenv("DISCORD_CLIENT_SECRET"),
-		DiscordRedirectURI:  getEnvDefault("DISCORD_REDIRECT_URI", "http://localhost:3000/api/auth/callback"),
-		JWTSecret:           getEnvDefault("JWT_SECRET", "dev-only-change-me"),
-		APIURL:              getEnvDefault("API_URL", "http://localhost:3000"),
-		APIToken:            os.Getenv("API_TOKEN"),
+		DiscordToken: os.Getenv("DISCORD_TOKEN"),
+		DatabaseURL:  os.Getenv("DATABASE_URL"),
+		APIURL:       getEnvDefault("API_URL", "http://localhost:3000"),
+		APIToken:     os.Getenv("API_TOKEN"),
 	}
 
 	if cfg.DiscordToken == "" {
@@ -51,12 +35,6 @@ func Load() (*Config, error) {
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")
-	}
-	if cfg.DiscordClientID == "" {
-		return nil, fmt.Errorf("DISCORD_CLIENT_ID is required")
-	}
-	if cfg.DiscordClientSecret == "" {
-		return nil, fmt.Errorf("DISCORD_CLIENT_SECRET is required")
 	}
 
 	return cfg, nil
