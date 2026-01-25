@@ -24,10 +24,10 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		DiscordToken:        os.Getenv("DISCORD_TOKEN"),
-		DatabaseURL:         os.Getenv("DATABASE_URL"),
-		APIURL:              getEnvDefault("API_URL", "http://localhost:3000"),
-		APIToken:            os.Getenv("API_TOKEN"),
+		DiscordToken: os.Getenv("DISCORD_TOKEN"),
+		DatabaseURL:  os.Getenv("DATABASE_URL"),
+		APIURL:       getEnvDefault("API_URL", "http://localhost:3000"),
+		APIToken:     os.Getenv("API_TOKEN"),
 	}
 
 	if cfg.DiscordToken == "" {
