@@ -24,6 +24,10 @@ type Config struct {
 
 	// Session
 	JWTSecret string
+
+	// API
+	APIURL   string
+	APIToken string
 }
 
 func Load() (*Config, error) {
@@ -38,6 +42,8 @@ func Load() (*Config, error) {
 		DiscordClientSecret: os.Getenv("DISCORD_CLIENT_SECRET"),
 		DiscordRedirectURI:  getEnvDefault("DISCORD_REDIRECT_URI", "http://localhost:3000/api/auth/callback"),
 		JWTSecret:           getEnvDefault("JWT_SECRET", "dev-only-change-me"),
+		APIURL:              getEnvDefault("API_URL", "http://localhost:3000"),
+		APIToken:            os.Getenv("API_TOKEN"),
 	}
 
 	if cfg.DiscordToken == "" {

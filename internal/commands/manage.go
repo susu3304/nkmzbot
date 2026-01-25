@@ -1,17 +1,16 @@
 package commands
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/susu3304/nkmzbot/internal/db"
+	"github.com/susu3304/nkmzbot/internal/client"
 )
 
-func HandleAdd(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.DB) {
+func HandleAdd(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client.Client) {
 	data := i.ApplicationCommandData()
-	guildID := ParseGuildID(i.GuildID)
+	guildID := i.GuildID
 
 	options := data.Options
 	var name, response string
@@ -23,7 +22,7 @@ func HandleAdd(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.DB) 
 		}
 	}
 
-	err := db.AddCommand(context.Background(), guildID, name, response)
+	err := cli.AddCommand(guildID, name, response)
 	var content string
 	if err != nil {
 		content = "追加に失敗しました。"
@@ -39,9 +38,9 @@ func HandleAdd(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.DB) 
 	})
 }
 
-func HandleRemove(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.DB) {
+func HandleRemove(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client.Client) {
 	data := i.ApplicationCommandData()
-	guildID := ParseGuildID(i.GuildID)
+	guildID := i.GuildID
 
 	options := data.Options
 	var name string
@@ -51,7 +50,7 @@ func HandleRemove(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.D
 		}
 	}
 
-	err := db.RemoveCommand(context.Background(), guildID, name)
+	err := cli.RemoveCommand(guildID, name)
 	var content string
 	if err != nil {
 		content = "そのコマンドは存在しません。"
@@ -67,9 +66,9 @@ func HandleRemove(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.D
 	})
 }
 
-func HandleUpdate(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.DB) {
+func HandleUpdate(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client.Client) {
 	data := i.ApplicationCommandData()
-	guildID := ParseGuildID(i.GuildID)
+	guildID := i.GuildID
 
 	options := data.Options
 	var name, response string
@@ -81,7 +80,7 @@ func HandleUpdate(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.D
 		}
 	}
 
-	err := db.UpdateCommand(context.Background(), guildID, name, response)
+	err := cli.UpdateCommand(guildID, name, response)
 	var content string
 	if err != nil {
 		content = "そのコマンドは存在しません。"
@@ -97,9 +96,9 @@ func HandleUpdate(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.D
 	})
 }
 
-func HandleAddBulk(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.DB) {
+func HandleAddBulk(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client.Client) {
 	data := i.ApplicationCommandData()
-	guildID := ParseGuildID(i.GuildID)
+	guildID := i.GuildID
 
 	options := data.Options
 	var commandsText string
@@ -122,26 +121,22 @@ func HandleAddBulk(s *discordgo.Session, i *discordgo.InteractionCreate, db *db.
 		return
 	}
 
-	// Add commands to database
-	successCount := 0
-	var errors []string
+	// Convert to client bulk input
+	var bulkInputs []client.BulkCommandInput
 	for _, cmd := range commands {
-		err := db.AddCommand(context.Background(), guildID, cmd.Name, cmd.Response)
-		if err != nil {
-			errors = append(errors, fmt.Sprintf("'%s': 追加失敗", cmd.Name))
-		} else {
-			successCount++
-		}
+		bulkInputs = append(bulkInputs, client.BulkCommandInput{
+			Name:     cmd.Name,
+			Response: cmd.Response,
+		})
 	}
 
-	// Build response message
+	// Add commands using API
+	err := cli.AddBulkCommands(guildID, bulkInputs)
 	var content string
-	if successCount > 0 && len(errors) == 0 {
-		content = fmt.Sprintf("✅ %d件のコマンドを追加しました。", successCount)
-	} else if successCount > 0 {
-		content = fmt.Sprintf("✅ %d件のコマンドを追加しました。\n❌ エラー: %s", successCount, strings.Join(errors, ", "))
+	if err != nil {
+		content = fmt.Sprintf("❌ コマンドの追加に失敗しました。")
 	} else {
-		content = fmt.Sprintf("❌ コマンドの追加に失敗しました: %s", strings.Join(errors, ", "))
+		content = fmt.Sprintf("✅ コマンドを追加しました。")
 	}
 
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
