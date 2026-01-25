@@ -52,11 +52,6 @@ func (a *API) setupRoutes() {
 	protected.Use(a.authMiddleware)
 
 	protected.HandleFunc("/user/guilds", a.handleUserGuilds).Methods("GET")
-	protected.HandleFunc("/guilds/{guild_id}/commands", a.handleListCommands).Methods("GET")
-	protected.HandleFunc("/guilds/{guild_id}/commands", a.handleAddCommand).Methods("POST")
-	protected.HandleFunc("/guilds/{guild_id}/commands/{name}", a.handleUpdateCommand).Methods("PUT")
-	protected.HandleFunc("/guilds/{guild_id}/commands/{name}", a.handleDeleteCommand).Methods("DELETE")
-	protected.HandleFunc("/guilds/{guild_id}/commands/bulk-delete", a.handleBulkDeleteCommands).Methods("POST")
 }
 
 func (a *API) Start() error {
