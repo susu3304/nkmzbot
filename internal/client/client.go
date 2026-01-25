@@ -44,7 +44,7 @@ func (c *Client) doRequest(method, path string, body interface{}) (*http.Respons
 
 	req.Header.Set("Content-Type", "application/json")
 	if c.Token != "" {
-		req.Header.Set("Authorization", "Bearer " + c.Token)
+		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
 
 	return c.HTTPClient.Do(req)
