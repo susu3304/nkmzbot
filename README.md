@@ -53,6 +53,14 @@ go build -o nkmzbot cmd/nkmzbot/main.go
 - `/jikan` - スケジュール実行を管理
 - `/nomikai` - 飲み会割り勘セッションを操作
 - `/guess` - ジオゲッサーを開始・プレイ
+- `/wallet` - Wallet API を使って送金・請求を記録
 - `Register as Response` - メッセージコンテキストメニュー（メッセージを右クリックしてコマンドとして登録）
+
+`/wallet` は以下のサブコマンドを提供します。
+
+- `/wallet pay user amount memo?` - 自分が支払う送金を記録
+- `/wallet req user amount memo?` - 相手への請求を記録
+
+Wallet API への呼び出しでは既存の `API_TOKEN` を使い、操作ユーザーの Discord ID を `X-Discord-User-ID` ヘッダーで渡します。バックエンド側で Discord ID から Wallet 利用者を特定できる必要があります。
 
 登録したコマンドは `!コマンド名` で呼び出せます。

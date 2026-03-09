@@ -164,6 +164,8 @@ func (b *Bot) handleApplicationCommand(s *discordgo.Session, i *discordgo.Intera
 		commands.HandleNomikai(s, i, b.nomikai)
 	case "guess":
 		commands.HandleGuess(s, i, b.guess)
+	case "wallet":
+		commands.HandleWallet(s, i, b.client)
 	case "jikan":
 		commands.HandleJikan(s, i, b.nomikai, b.db, b.client)
 	case "Register as Response":

@@ -34,6 +34,10 @@ func New(baseURL, token string) *Client {
 }
 
 func (c *Client) doRequest(method, path string, body interface{}) (*http.Response, error) {
+	return c.doRequestWithHeaders(method, path, body, nil)
+}
+
+func (c *Client) doRequestWithHeaders(method, path string, body interface{}, headers map[string]string) (*http.Response, error) {
 	url := c.BaseURL + path
 	var bodyReader io.Reader
 	if body != nil {
@@ -52,6 +56,12 @@ func (c *Client) doRequest(method, path string, body interface{}) (*http.Respons
 	req.Header.Set("Content-Type", "application/json")
 	if c.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+	for key, value := range headers {
+		if value == "" {
+			continue
+		}
+		req.Header.Set(key, value)
 	}
 
 	resp, err := c.HTTPClient.Do(req)
@@ -189,6 +199,33 @@ type BulkCommandInput struct {
 	Response string `json:"response"`
 }
 
+type WalletEvent struct {
+	ID              string `json:"id"`
+	Kind            string `json:"kind"`
+	FromUserID      string `json:"fromUserId"`
+	ToUserID        string `json:"toUserId"`
+	Amount          int64  `json:"amount"`
+	SettledAmount   int64  `json:"settledAmount"`
+	RemainingAmount int64  `json:"remainingAmount"`
+	Status          string `json:"status"`
+	Note            string `json:"note"`
+	CreatedByUserID string `json:"createdByUserId"`
+	CreatedAt       string `json:"createdAt"`
+	UpdatedAt       string `json:"updatedAt"`
+}
+
+type createTransferRequest struct {
+	ToDiscordID string `json:"toDiscordId"`
+	Amount      int64  `json:"amount"`
+	Note        string `json:"note,omitempty"`
+}
+
+type createRequestRequest struct {
+	FromDiscordID string `json:"fromDiscordId"`
+	Amount        int64  `json:"amount"`
+	Note          string `json:"note,omitempty"`
+}
+
 func (c *Client) AddBulkCommands(guildID string, commands []BulkCommandInput) error {
 	body := map[string]interface{}{
 		"commands": commands,
@@ -203,6 +240,56 @@ func (c *Client) AddBulkCommands(guildID string, commands []BulkCommandInput) er
 		return err
 	}
 	return nil
+}
+
+func (c *Client) CreateWalletTransfer(actorDiscordUserID, toDiscordID string, amount int64, note string) (*WalletEvent, error) {
+	body := createTransferRequest{
+		ToDiscordID: toDiscordID,
+		Amount:      amount,
+		Note:        note,
+	}
+	resp, err := c.doRequestWithHeaders("POST", "/wallet/transfers", body, map[string]string{
+		"X-Discord-User-ID": actorDiscordUserID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if err := expectStatus(resp, http.StatusCreated, http.StatusOK); err != nil {
+		return nil, err
+	}
+
+	var event WalletEvent
+	if err := json.NewDecoder(resp.Body).Decode(&event); err != nil {
+		return nil, err
+	}
+	return &event, nil
+}
+
+func (c *Client) CreateWalletRequest(actorDiscordUserID, fromDiscordID string, amount int64, note string) (*WalletEvent, error) {
+	body := createRequestRequest{
+		FromDiscordID: fromDiscordID,
+		Amount:        amount,
+		Note:          note,
+	}
+	resp, err := c.doRequestWithHeaders("POST", "/wallet/requests", body, map[string]string{
+		"X-Discord-User-ID": actorDiscordUserID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if err := expectStatus(resp, http.StatusCreated, http.StatusOK); err != nil {
+		return nil, err
+	}
+
+	var event WalletEvent
+	if err := json.NewDecoder(resp.Body).Decode(&event); err != nil {
+		return nil, err
+	}
+	return &event, nil
 }
 
 func (c *Client) ListCommands(guildID string) ([]CommandRecord, error) {
