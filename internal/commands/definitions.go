@@ -322,6 +322,63 @@ func GetCommands() []*discordgo.ApplicationCommand {
 			},
 		},
 		{
+			Name:         "wallet",
+			Description:  "個人間の送金・請求を記録します",
+			DMPermission: boolPtr(false),
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "pay",
+					Description: "自分が支払う送金を記録します",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionUser,
+							Name:        "user",
+							Description: "受け取り相手",
+							Required:    true,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionInteger,
+							Name:        "amount",
+							Description: "金額（円）",
+							Required:    true,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "memo",
+							Description: "メモ",
+							Required:    false,
+						},
+					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "req",
+					Description: "相手への請求を記録します",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionUser,
+							Name:        "user",
+							Description: "支払ってほしい相手",
+							Required:    true,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionInteger,
+							Name:        "amount",
+							Description: "金額（円）",
+							Required:    true,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "memo",
+							Description: "メモ",
+							Required:    false,
+						},
+					},
+				},
+			},
+		},
+		{
 			Name: "Register as Response",
 			Type: discordgo.MessageApplicationCommand,
 		},
