@@ -39,7 +39,7 @@ func (c *Client) doRequest(method, path string, body interface{}) (*http.Respons
 }
 
 func (c *Client) doRequestWithHeaders(method, path string, body interface{}, headers map[string]string) (*http.Response, error) {
-	url := c.BaseURL + path
+	requestURL := c.BaseURL + path
 	var bodyReader io.Reader
 	if body != nil {
 		jsonBody, err := json.Marshal(body)
@@ -49,7 +49,7 @@ func (c *Client) doRequestWithHeaders(method, path string, body interface{}, hea
 		bodyReader = bytes.NewBuffer(jsonBody)
 	}
 
-	req, err := http.NewRequest(method, url, bodyReader)
+	req, err := http.NewRequest(method, requestURL, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
