@@ -48,6 +48,7 @@ go build -o nkmzbot cmd/nkmzbot/main.go
 - `/remove` - コマンドを削除
   - `name`: コマンド名
 - `/list` - 登録されているコマンド一覧を表示
+- `/ramdom` - 登録されているコマンドからランダムに1つ返答
 
 ### その他のコマンド
 - `/jikan` - スケジュール実行を管理

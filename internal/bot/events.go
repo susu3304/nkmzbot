@@ -160,6 +160,8 @@ func (b *Bot) handleApplicationCommand(s *discordgo.Session, i *discordgo.Intera
 		commands.HandleUpdate(s, i, b.client)
 	case "list":
 		commands.HandleList(s, i, b.client)
+	case "ramdom":
+		commands.HandleRandom(s, i, b.client)
 	case "nomikai":
 		commands.HandleNomikai(s, i, b.nomikai)
 	case "guess":

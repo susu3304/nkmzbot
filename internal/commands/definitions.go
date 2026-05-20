@@ -124,6 +124,11 @@ func GetCommands() []*discordgo.ApplicationCommand {
 			DMPermission: boolPtr(false),
 		},
 		{
+			Name:         "ramdom",
+			Description:  "登録されているコマンドからランダムに1つ返します",
+			DMPermission: boolPtr(false),
+		},
+		{
 			Name:         "nomikai",
 			Description:  "飲み会割り勘セッションを操作します",
 			DMPermission: boolPtr(false),
