@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/susu3304/nkmzbot/internal/client"
 	"github.com/susu3304/nkmzbot/internal/commands"
 )
 
@@ -53,7 +54,15 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		if m.GuildID != "" {
 			resp, err := b.client.GetCommandResponse(m.GuildID, cmdName)
 			if err == nil && resp != "" {
-				s.ChannelMessageSend(m.ChannelID, resp)
+				if _, err := s.ChannelMessageSend(m.ChannelID, resp); err == nil {
+					go func() {
+						_ = b.client.RecordCommandUsage(m.GuildID, cmdName, client.CommandUsageInput{
+							ActorID:   m.Author.ID,
+							ChannelID: m.ChannelID,
+							Source:    "bot-message",
+						})
+					}()
+				}
 			}
 		}
 	}

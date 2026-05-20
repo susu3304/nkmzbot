@@ -17,12 +17,13 @@ import (
 )
 
 type Bot struct {
-	session  *discordgo.Session
-	db       *db.DB
-	client   *client.Client
-	nomikai  *nomikai.Service
-	guess    *guess.Service
-	reminder *reminderWorker
+	session         *discordgo.Session
+	db              *db.DB
+	client          *client.Client
+	nomikai         *nomikai.Service
+	guess           *guess.Service
+	reminder        *reminderWorker
+	schedulerCancel context.CancelFunc
 }
 
 func New(token, apiURL, apiToken string, database *db.DB) (*Bot, error) {
@@ -82,12 +83,16 @@ func (b *Bot) Start() error {
 	if err := commands.RestoreScheduledTasks(ctx, b.session, b.nomikai, b.db, b.client); err != nil {
 		log.Printf("Warning: failed to restore scheduled tasks: %v", err)
 	}
+	b.schedulerCancel = commands.StartScheduledTaskPolling(b.session, b.nomikai, b.db, b.client, 0)
 
 	b.reminder.start()
 	return nil
 }
 
 func (b *Bot) Stop() error {
+	if b.schedulerCancel != nil {
+		b.schedulerCancel()
+	}
 	if b.reminder != nil {
 		b.reminder.stop()
 	}

@@ -96,3 +96,72 @@ func TestCreateWalletRequestUsesDiscordIDPayload(t *testing.T) {
 		t.Fatalf("event.Kind = %q, want %q", event.Kind, "request")
 	}
 }
+
+func TestAddCommandSendsOptionalTags(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("method = %s, want %s", r.Method, http.MethodPost)
+		}
+		if r.URL.Path != "/bot/guilds/guild-1/commands/add" {
+			t.Fatalf("path = %s, want /bot/guilds/guild-1/commands/add", r.URL.Path)
+		}
+
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if got := body["name"]; got != "hello" {
+			t.Fatalf("name = %v, want hello", got)
+		}
+		tags, ok := body["tags"].([]any)
+		if !ok {
+			t.Fatalf("tags = %#v, want array", body["tags"])
+		}
+		if len(tags) != 2 || tags[0] != "fun" || tags[1] != "daily" {
+			t.Fatalf("tags = %#v, want [fun daily]", tags)
+		}
+
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+
+	cli := New(server.URL, "")
+	if err := cli.AddCommand("guild-1", "hello", "Hello", " fun ", "daily", "FUN"); err != nil {
+		t.Fatalf("AddCommand() error = %v", err)
+	}
+}
+
+func TestRecordCommandUsagePostsUsageEndpoint(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("method = %s, want %s", r.Method, http.MethodPost)
+		}
+		if r.URL.Path != "/bot/guilds/guild-1/commands/hello/usage" {
+			t.Fatalf("path = %s, want /bot/guilds/guild-1/commands/hello/usage", r.URL.Path)
+		}
+		var body map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if got := body["source"]; got != "bot-message" {
+			t.Fatalf("source = %q, want %q", got, "bot-message")
+		}
+		if got := body["actorId"]; got != "user-1" {
+			t.Fatalf("actorId = %q, want %q", got, "user-1")
+		}
+		if got := body["channelId"]; got != "channel-1" {
+			t.Fatalf("channelId = %q, want %q", got, "channel-1")
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	cli := New(server.URL, "")
+	if err := cli.RecordCommandUsage("guild-1", "hello", CommandUsageInput{
+		ActorID:   "user-1",
+		ChannelID: "channel-1",
+		Source:    "bot-message",
+	}); err != nil {
+		t.Fatalf("RecordCommandUsage() error = %v", err)
+	}
+}

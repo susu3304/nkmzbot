@@ -14,16 +14,19 @@ func HandleAdd(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client
 
 	options := data.Options
 	var name, response string
+	var tags []string
 	for _, opt := range options {
 		switch opt.Name {
 		case "name":
 			name = opt.StringValue()
 		case "response":
 			response = opt.StringValue()
+		case "tags":
+			tags = parseTags(opt.StringValue())
 		}
 	}
 
-	err := cli.AddCommand(guildID, name, response)
+	err := cli.AddCommand(guildID, name, response, tags...)
 	var content string
 	if err != nil {
 		if client.IsConnectionError(err) {
@@ -81,16 +84,19 @@ func HandleUpdate(s *discordgo.Session, i *discordgo.InteractionCreate, cli *cli
 
 	options := data.Options
 	var name, response string
+	var tags []string
 	for _, opt := range options {
 		switch opt.Name {
 		case "name":
 			name = opt.StringValue()
 		case "response":
 			response = opt.StringValue()
+		case "tags":
+			tags = parseTags(opt.StringValue())
 		}
 	}
 
-	err := cli.UpdateCommand(guildID, name, response)
+	err := cli.UpdateCommand(guildID, name, response, tags...)
 	var content string
 	if err != nil {
 		if client.IsConnectionError(err) {
@@ -116,9 +122,13 @@ func HandleAddBulk(s *discordgo.Session, i *discordgo.InteractionCreate, cli *cl
 
 	options := data.Options
 	var commandsText string
+	var tags []string
 	for _, opt := range options {
-		if opt.Name == "commands" {
+		switch opt.Name {
+		case "commands":
 			commandsText = opt.StringValue()
+		case "tags":
+			tags = parseTags(opt.StringValue())
 		}
 	}
 
@@ -141,6 +151,7 @@ func HandleAddBulk(s *discordgo.Session, i *discordgo.InteractionCreate, cli *cl
 		bulkInputs = append(bulkInputs, client.BulkCommandInput{
 			Name:     cmd.Name,
 			Response: cmd.Response,
+			Tags:     tags,
 		})
 	}
 
@@ -169,6 +180,28 @@ func HandleAddBulk(s *discordgo.Session, i *discordgo.InteractionCreate, cli *cl
 type BulkCommand struct {
 	Name     string
 	Response string
+}
+
+func parseTags(input string) []string {
+	parts := strings.FieldsFunc(input, func(r rune) bool {
+		return r == ',' || r == '、' || r == ' ' || r == '\t' || r == '\n'
+	})
+
+	tags := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, part := range parts {
+		tag := strings.TrimSpace(part)
+		if tag == "" {
+			continue
+		}
+		key := strings.ToLower(tag)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		tags = append(tags, tag)
+	}
+	return tags
 }
 
 // parseBulkCommands parses a multi-line string in the format:

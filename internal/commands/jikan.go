@@ -24,6 +24,7 @@ type activeTask struct {
 	ChannelID string
 	GuildID   int64
 	UserID    string
+	timer     *time.Timer
 }
 
 var (
@@ -33,56 +34,131 @@ var (
 	jst = time.FixedZone("JST", 9*60*60)
 )
 
+const scheduledTaskPollInterval = 30 * time.Second
+
 // RestoreScheduledTasks loads all scheduled tasks from the database and schedules them
 func RestoreScheduledTasks(ctx context.Context, s *discordgo.Session, svc *nomikai.Service, database *db.DB, cli *client.Client) error {
+	if err := syncScheduledTasks(ctx, s, svc, database, cli, false); err != nil {
+		return err
+	}
+
+	tasksMu.Lock()
+	count := len(activeTasks)
+	tasksMu.Unlock()
+	log.Printf("Restored %d scheduled tasks", count)
+	return nil
+}
+
+func StartScheduledTaskPolling(s *discordgo.Session, svc *nomikai.Service, database *db.DB, cli *client.Client, interval time.Duration) context.CancelFunc {
+	if interval <= 0 {
+		interval = scheduledTaskPollInterval
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				pollCtx, pollCancel := context.WithTimeout(ctx, 10*time.Second)
+				if err := SyncScheduledTasks(pollCtx, s, svc, database, cli); err != nil {
+					log.Printf("Failed to poll scheduled tasks: %v", err)
+				}
+				pollCancel()
+			}
+		}
+	}()
+
+	return cancel
+}
+
+func SyncScheduledTasks(ctx context.Context, s *discordgo.Session, svc *nomikai.Service, database *db.DB, cli *client.Client) error {
+	return syncScheduledTasks(ctx, s, svc, database, cli, true)
+}
+
+func syncScheduledTasks(ctx context.Context, s *discordgo.Session, svc *nomikai.Service, database *db.DB, cli *client.Client, runExpiredNonRepeating bool) error {
 	dbTasks, err := database.ListAllScheduledTasks(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to load scheduled tasks: %w", err)
 	}
 
 	now := time.Now()
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
+	desired := make(map[int]*activeTask, len(dbTasks))
 
 	for _, dbTask := range dbTasks {
-		// Skip tasks that are already past (non-repeating)
-		if dbTask.Time.Before(now) && !dbTask.Repeat {
-			// Delete expired non-repeating tasks
-			if err := database.DeleteScheduledTask(ctx, dbTask.ID); err != nil {
-				log.Printf("Failed to delete expired task %d: %v", dbTask.ID, err)
-			}
-			continue
+		task, ok := prepareScheduledTask(ctx, database, dbTask, now, runExpiredNonRepeating)
+		if ok {
+			desired[task.ID] = task
 		}
-
-		// For repeating tasks that are past, update to next occurrence
-		if dbTask.Time.Before(now) && dbTask.Repeat {
-			// Calculate next occurrence efficiently
-			daysPast := int(now.Sub(dbTask.Time).Hours() / 24)
-			daysToAdd := daysPast + 1
-			nextTime := dbTask.Time.Add(time.Duration(daysToAdd) * 24 * time.Hour)
-			dbTask.Time = nextTime
-			if err := database.UpdateScheduledTaskTime(ctx, dbTask.ID, nextTime); err != nil {
-				log.Printf("Failed to update task %d time: %v", dbTask.ID, err)
-				continue
-			}
-		}
-
-		// Create active task
-		task := &activeTask{
-			ID:        dbTask.ID,
-			Command:   dbTask.Command,
-			Time:      dbTask.Time,
-			Repeat:    dbTask.Repeat,
-			ChannelID: dbTask.ChannelID,
-			GuildID:   dbTask.GuildID,
-			UserID:    dbTask.UserID,
-		}
-		activeTasks[task.ID] = task
-		go scheduleTask(s, svc, database, cli, task)
 	}
 
-	log.Printf("Restored %d scheduled tasks", len(activeTasks))
+	reconcileActiveTasks(s, svc, database, cli, desired)
 	return nil
+}
+
+func prepareScheduledTask(ctx context.Context, database *db.DB, dbTask *db.ScheduledTask, now time.Time, runExpiredNonRepeating bool) (*activeTask, bool) {
+	if dbTask.Time.Before(now) && !dbTask.Repeat {
+		if runExpiredNonRepeating {
+			return newActiveTask(dbTask), true
+		}
+		if err := database.DeleteScheduledTask(ctx, dbTask.ID); err != nil {
+			log.Printf("Failed to delete expired task %d: %v", dbTask.ID, err)
+		}
+		return nil, false
+	}
+
+	if dbTask.Time.Before(now) && dbTask.Repeat {
+		nextTime := nextDailyOccurrence(dbTask.Time, now)
+		dbTask.Time = nextTime
+		if err := database.UpdateScheduledTaskTime(ctx, dbTask.ID, nextTime); err != nil {
+			log.Printf("Failed to update task %d time: %v", dbTask.ID, err)
+			return nil, false
+		}
+	}
+
+	return newActiveTask(dbTask), true
+}
+
+func newActiveTask(dbTask *db.ScheduledTask) *activeTask {
+	return &activeTask{
+		ID:        dbTask.ID,
+		Command:   dbTask.Command,
+		Time:      dbTask.Time,
+		Repeat:    dbTask.Repeat,
+		ChannelID: dbTask.ChannelID,
+		GuildID:   dbTask.GuildID,
+		UserID:    dbTask.UserID,
+	}
+}
+
+func nextDailyOccurrence(scheduled, now time.Time) time.Time {
+	if scheduled.After(now) {
+		return scheduled
+	}
+	daysToAdd := int(now.Sub(scheduled).Hours()/24) + 1
+	return scheduled.Add(time.Duration(daysToAdd) * 24 * time.Hour)
+}
+
+func reconcileActiveTasks(s *discordgo.Session, svc *nomikai.Service, database *db.DB, cli *client.Client, desired map[int]*activeTask) {
+	for _, task := range desired {
+		activateScheduledTask(s, svc, database, cli, task)
+	}
+
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
+	for id, task := range activeTasks {
+		if _, ok := desired[id]; ok {
+			continue
+		}
+		if task.timer != nil {
+			task.timer.Stop()
+		}
+		delete(activeTasks, id)
+	}
 }
 
 func HandleJikan(s *discordgo.Session, i *discordgo.InteractionCreate, svc *nomikai.Service, database *db.DB, cli *client.Client) {
@@ -150,21 +226,7 @@ func handleJikanAdd(s *discordgo.Session, i *discordgo.InteractionCreate, option
 		return
 	}
 
-	// Register active task in memory
-	tasksMu.Lock()
-	task := &activeTask{
-		ID:        dbTask.ID,
-		Command:   dbTask.Command,
-		Time:      dbTask.Time,
-		Repeat:    dbTask.Repeat,
-		ChannelID: dbTask.ChannelID,
-		GuildID:   dbTask.GuildID,
-		UserID:    dbTask.UserID,
-	}
-	activeTasks[dbTask.ID] = task
-	tasksMu.Unlock()
-
-	scheduleTask(s, svc, database, cli, task)
+	activateScheduledTask(s, svc, database, cli, newActiveTask(dbTask))
 
 	// Display time in JST for user
 	jstTime := targetTime.In(jst)
@@ -255,10 +317,7 @@ func handleJikanDelete(s *discordgo.Session, i *discordgo.InteractionCreate, opt
 		return
 	}
 
-	// Remove from memory
-	tasksMu.Lock()
-	delete(activeTasks, taskID)
-	tasksMu.Unlock()
+	removeActiveTask(taskID)
 
 	respondText(s, i, fmt.Sprintf("タスク ID %d を削除しました", taskID))
 }
@@ -273,50 +332,113 @@ func getIntegerOption(opts []*discordgo.ApplicationCommandInteractionDataOption,
 	return nil
 }
 
-func scheduleTask(s *discordgo.Session, svc *nomikai.Service, database *db.DB, cli *client.Client, task *activeTask) {
+func activateScheduledTask(s *discordgo.Session, svc *nomikai.Service, database *db.DB, cli *client.Client, task *activeTask) {
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
+
+	if existing, ok := activeTasks[task.ID]; ok {
+		if sameActiveTask(existing, task) {
+			return
+		}
+		if existing.timer != nil {
+			existing.timer.Stop()
+		}
+	}
+
 	now := time.Now()
 	duration := task.Time.Sub(now)
-
-	// Validate that duration is positive, otherwise schedule immediately
 	if duration < 0 {
 		duration = 0
 	}
 
-	time.AfterFunc(duration, func() {
-		// Execute
-		guildIDStr := strconv.FormatInt(task.GuildID, 10)
-		executeScheduledCommand(s, svc, database, cli, task.ChannelID, guildIDStr, task.UserID, task.Command)
+	activeTasks[task.ID] = task
+	task.timer = time.AfterFunc(duration, func() {
+		executeActiveTask(s, svc, database, cli, task.ID)
+	})
+}
 
-		tasksMu.Lock()
-		defer tasksMu.Unlock()
+func sameActiveTask(a, b *activeTask) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.ID == b.ID &&
+		a.Command == b.Command &&
+		a.Time.Equal(b.Time) &&
+		a.Repeat == b.Repeat &&
+		a.ChannelID == b.ChannelID &&
+		a.GuildID == b.GuildID &&
+		a.UserID == b.UserID
+}
 
-		// Check if task still exists in memory
-		if _, exists := activeTasks[task.ID]; !exists {
+func executeActiveTask(s *discordgo.Session, svc *nomikai.Service, database *db.DB, cli *client.Client, taskID int) {
+	tasksMu.Lock()
+	task, exists := activeTasks[taskID]
+	tasksMu.Unlock()
+	if !exists {
+		return
+	}
+
+	guildIDStr := strconv.FormatInt(task.GuildID, 10)
+	executeScheduledCommand(s, svc, database, cli, task.ChannelID, guildIDStr, task.UserID, task.Command)
+
+	if !isCurrentActiveTask(taskID, task) {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if task.Repeat {
+		nextTime := nextDailyOccurrence(task.Time, time.Now())
+		if err := database.UpdateScheduledTaskTime(ctx, task.ID, nextTime); err != nil {
+			log.Printf("Failed to update scheduled task time: %v", err)
 			return
 		}
 
-		// Use timeout context for database operations
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		if task.Repeat {
-			// Update time for next run
-			task.Time = task.Time.Add(24 * time.Hour)
-			// Update database
-			if err := database.UpdateScheduledTaskTime(ctx, task.ID, task.Time); err != nil {
-				log.Printf("Failed to update scheduled task time: %v", err)
-				return
-			}
-			go scheduleTask(s, svc, database, cli, task)
-		} else {
-			// Remove from database
-			if err := database.DeleteScheduledTask(ctx, task.ID); err != nil {
-				log.Printf("Failed to delete scheduled task: %v", err)
-			}
-			// Remove from memory
-			delete(activeTasks, task.ID)
+		if !isCurrentActiveTask(taskID, task) {
+			return
 		}
-	})
+		nextTask := *task
+		nextTask.Time = nextTime
+		nextTask.timer = nil
+		activateScheduledTask(s, svc, database, cli, &nextTask)
+		return
+	}
+
+	if err := database.DeleteScheduledTask(ctx, task.ID); err != nil {
+		log.Printf("Failed to delete scheduled task: %v", err)
+	}
+	removeActiveTaskIfCurrent(taskID, task)
+}
+
+func isCurrentActiveTask(taskID int, task *activeTask) bool {
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
+	return activeTasks[taskID] == task
+}
+
+func removeActiveTask(taskID int) {
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
+	if task, ok := activeTasks[taskID]; ok {
+		if task.timer != nil {
+			task.timer.Stop()
+		}
+		delete(activeTasks, taskID)
+	}
+}
+
+func removeActiveTaskIfCurrent(taskID int, expected *activeTask) {
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
+	task, ok := activeTasks[taskID]
+	if !ok || task != expected {
+		return
+	}
+	if task.timer != nil {
+		task.timer.Stop()
+	}
+	delete(activeTasks, taskID)
 }
 
 func parseTime(input string) (time.Time, error) {
@@ -355,7 +477,15 @@ func executeScheduledCommand(s *discordgo.Session, svc *nomikai.Service, databas
 		// Use API client instead of DB
 		resp, err := cli.GetCommandResponse(guildIDStr, cmdName)
 		if err == nil && resp != "" {
-			s.ChannelMessageSend(channelID, resp)
+			if _, err := s.ChannelMessageSend(channelID, resp); err == nil {
+				go func() {
+					_ = cli.RecordCommandUsage(guildIDStr, cmdName, client.CommandUsageInput{
+						ActorID:   userID,
+						ChannelID: channelID,
+						Source:    "bot-scheduled",
+					})
+				}()
+			}
 			return
 		}
 	}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -109,10 +110,11 @@ func expectStatus(resp *http.Response, allowed ...int) error {
 }
 
 type CommandRecord struct {
-	GuildID   string `json:"guildId"`
-	Name      string `json:"name"`
-	Response  string `json:"response"`
-	CreatedAt string `json:"createdAt"`
+	GuildID   string   `json:"guildId"`
+	Name      string   `json:"name"`
+	Response  string   `json:"response"`
+	Tags      []string `json:"tags,omitempty"`
+	CreatedAt string   `json:"createdAt"`
 }
 
 type CommandsListResponse struct {
@@ -144,10 +146,17 @@ func (c *Client) GetCommandResponse(guildID, name string) (string, error) {
 	return cmdResp.Response, nil
 }
 
-func (c *Client) AddCommand(guildID, name, response string) error {
-	body := map[string]string{
-		"name":     name,
-		"response": response,
+type commandWriteRequest struct {
+	Name     string   `json:"name"`
+	Response string   `json:"response"`
+	Tags     []string `json:"tags,omitempty"`
+}
+
+func (c *Client) AddCommand(guildID, name, response string, tags ...string) error {
+	body := commandWriteRequest{
+		Name:     name,
+		Response: response,
+		Tags:     normalizeTags(tags),
 	}
 	resp, err := c.doRequest("POST", fmt.Sprintf("/bot/guilds/%s/commands/add", guildID), body)
 	if err != nil {
@@ -177,10 +186,11 @@ func (c *Client) RemoveCommand(guildID, name string) error {
 	return nil
 }
 
-func (c *Client) UpdateCommand(guildID, name, response string) error {
-	body := map[string]string{
-		"name":     name,
-		"response": response,
+func (c *Client) UpdateCommand(guildID, name, response string, tags ...string) error {
+	body := commandWriteRequest{
+		Name:     name,
+		Response: response,
+		Tags:     normalizeTags(tags),
 	}
 	resp, err := c.doRequest("POST", fmt.Sprintf("/bot/guilds/%s/commands/update", guildID), body)
 	if err != nil {
@@ -195,8 +205,32 @@ func (c *Client) UpdateCommand(guildID, name, response string) error {
 }
 
 type BulkCommandInput struct {
-	Name     string `json:"name"`
-	Response string `json:"response"`
+	Name     string   `json:"name"`
+	Response string   `json:"response"`
+	Tags     []string `json:"tags,omitempty"`
+}
+
+type CommandUsageInput struct {
+	ActorID   string `json:"actorId,omitempty"`
+	ChannelID string `json:"channelId,omitempty"`
+	Source    string `json:"source,omitempty"`
+}
+
+func (c *Client) RecordCommandUsage(guildID, name string, inputs ...CommandUsageInput) error {
+	body := CommandUsageInput{Source: "bot"}
+	if len(inputs) > 0 {
+		body = inputs[0]
+		if body.Source == "" {
+			body.Source = "bot"
+		}
+	}
+	resp, err := c.doRequest("POST", fmt.Sprintf("/bot/guilds/%s/commands/%s/usage", guildID, url.PathEscape(name)), body)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	return expectStatus(resp, http.StatusOK, http.StatusCreated, http.StatusNoContent)
 }
 
 type WalletEvent struct {
@@ -308,4 +342,29 @@ func (c *Client) ListCommands(guildID string) ([]CommandRecord, error) {
 		return nil, err
 	}
 	return listResp.Commands, nil
+}
+
+func normalizeTags(tags []string) []string {
+	if len(tags) == 0 {
+		return nil
+	}
+
+	normalized := make([]string, 0, len(tags))
+	seen := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		tag = strings.TrimSpace(tag)
+		if tag == "" {
+			continue
+		}
+		key := strings.ToLower(tag)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		normalized = append(normalized, tag)
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	return normalized
 }

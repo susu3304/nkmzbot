@@ -124,3 +124,17 @@ another invalid
 		})
 	}
 }
+
+func TestParseTags(t *testing.T) {
+	got := parseTags(" fun,info、Fun daily\tnews ")
+	want := []string{"fun", "info", "daily", "news"}
+
+	if len(got) != len(want) {
+		t.Fatalf("parseTags() returned %d tags, want %d: %#v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("parseTags()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}

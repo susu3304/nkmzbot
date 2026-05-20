@@ -21,6 +21,12 @@ func GetCommands() []*discordgo.ApplicationCommand {
 					Description: "返答内容",
 					Required:    true,
 				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "tags",
+					Description: "タグ（カンマ区切り、省略可）",
+					Required:    false,
+				},
 			},
 		},
 		{
@@ -53,6 +59,12 @@ func GetCommands() []*discordgo.ApplicationCommand {
 					Description: "新しい返答内容",
 					Required:    true,
 				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "tags",
+					Description: "タグ（カンマ区切り、省略可）",
+					Required:    false,
+				},
 			},
 		},
 		{
@@ -65,6 +77,12 @@ func GetCommands() []*discordgo.ApplicationCommand {
 					Name:        "commands",
 					Description: "コマンドリスト（形式: !cmd1: content1 改行 !cmd2: content2 ...）",
 					Required:    true,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "tags",
+					Description: "全コマンドに付けるタグ（カンマ区切り、省略可）",
+					Required:    false,
 				},
 			},
 		},
@@ -127,6 +145,14 @@ func GetCommands() []*discordgo.ApplicationCommand {
 			Name:         "ramdom",
 			Description:  "登録されているコマンドからランダムに1つ返します",
 			DMPermission: boolPtr(false),
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "tag",
+					Description: "このタグのコマンドから選びます（省略可）",
+					Required:    false,
+				},
+			},
 		},
 		{
 			Name:         "nomikai",
