@@ -3,7 +3,121 @@ package commands
 import "github.com/bwmarrin/discordgo"
 
 func GetCommands() []*discordgo.ApplicationCommand {
+	sourceMaxLength := 4000
 	return []*discordgo.ApplicationCommand{
+		{
+			Name:         "imm",
+			Description:  "IMMコードの実行とIMMカスタムコマンドを管理します",
+			DMPermission: boolPtr(false),
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "run",
+					Description: "IMMコードをその場で実行します",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "source",
+							Description: "実行するIMMコード（コードブロック可）",
+							Required:    true,
+							MaxLength:   sourceMaxLength,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "args",
+							Description: "bot_argsに渡す引数（空白区切り、引用符可）",
+							Required:    false,
+						},
+					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "check",
+					Description: "IMMコードを構文チェックします",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "source",
+							Description: "チェックするIMMコード（コードブロック可）",
+							Required:    true,
+							MaxLength:   sourceMaxLength,
+						},
+					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommandGroup,
+					Name:        "command",
+					Description: "IMMカスタムコマンドを管理します",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionSubCommand,
+							Name:        "add",
+							Description: "IMMカスタムコマンドを追加します",
+							Options: []*discordgo.ApplicationCommandOption{
+								{
+									Type:        discordgo.ApplicationCommandOptionString,
+									Name:        "name",
+									Description: "コマンド名（!は不要）",
+									Required:    true,
+								},
+								{
+									Type:        discordgo.ApplicationCommandOptionString,
+									Name:        "source",
+									Description: "IMMソース（bot_argsを使用できます）",
+									Required:    true,
+									MaxLength:   sourceMaxLength,
+								},
+								{
+									Type:        discordgo.ApplicationCommandOptionString,
+									Name:        "tags",
+									Description: "タグ（カンマ区切り、省略可）",
+									Required:    false,
+								},
+							},
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionSubCommand,
+							Name:        "update",
+							Description: "IMMカスタムコマンドを更新します",
+							Options: []*discordgo.ApplicationCommandOption{
+								{
+									Type:        discordgo.ApplicationCommandOptionString,
+									Name:        "name",
+									Description: "更新するコマンド名",
+									Required:    true,
+								},
+								{
+									Type:        discordgo.ApplicationCommandOptionString,
+									Name:        "source",
+									Description: "新しいIMMソース",
+									Required:    true,
+									MaxLength:   sourceMaxLength,
+								},
+								{
+									Type:        discordgo.ApplicationCommandOptionString,
+									Name:        "tags",
+									Description: "タグ（カンマ区切り、省略可）",
+									Required:    false,
+								},
+							},
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionSubCommand,
+							Name:        "remove",
+							Description: "IMMカスタムコマンドを削除します",
+							Options: []*discordgo.ApplicationCommandOption{
+								{
+									Type:        discordgo.ApplicationCommandOptionString,
+									Name:        "name",
+									Description: "削除するコマンド名",
+									Required:    true,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 		{
 			Name:         "add",
 			Description:  "新しいコマンドを追加します",
@@ -411,6 +525,10 @@ func GetCommands() []*discordgo.ApplicationCommand {
 		},
 		{
 			Name: "Register as Response",
+			Type: discordgo.MessageApplicationCommand,
+		},
+		{
+			Name: "Run as IMM",
 			Type: discordgo.MessageApplicationCommand,
 		},
 	}

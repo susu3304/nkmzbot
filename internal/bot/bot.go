@@ -13,6 +13,7 @@ import (
 	"github.com/susu3304/nkmzbot/internal/commands"
 	"github.com/susu3304/nkmzbot/internal/db"
 	"github.com/susu3304/nkmzbot/internal/guess"
+	"github.com/susu3304/nkmzbot/internal/imm"
 	"github.com/susu3304/nkmzbot/internal/nomikai"
 )
 
@@ -20,13 +21,14 @@ type Bot struct {
 	session         *discordgo.Session
 	db              *db.DB
 	client          *client.Client
+	immRunner       *imm.Runner
 	nomikai         *nomikai.Service
 	guess           *guess.Service
 	reminder        *reminderWorker
 	schedulerCancel context.CancelFunc
 }
 
-func New(token, apiURL, apiToken string, database *db.DB) (*Bot, error) {
+func New(token, apiURL, apiToken string, database *db.DB, immRunner *imm.Runner) (*Bot, error) {
 	session, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create discord session: %w", err)
@@ -53,11 +55,12 @@ func New(token, apiURL, apiToken string, database *db.DB) (*Bot, error) {
 	}
 
 	bot := &Bot{
-		session: session,
-		db:      database,
-		client:  client.New(apiURL, apiToken),
-		nomikai: nomikai.NewService(database),
-		guess:   guess.NewService(database),
+		session:   session,
+		db:        database,
+		client:    client.New(apiURL, apiToken),
+		immRunner: immRunner,
+		nomikai:   nomikai.NewService(database),
+		guess:     guess.NewService(database),
 	}
 	bot.reminder = newReminderWorker(session, database, bot.nomikai)
 

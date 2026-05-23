@@ -8,6 +8,10 @@ Discord bot for managing custom commands.
 - DATABASE_URL: Postgres 接続文字列
 - API_URL: カスタムコマンド管理APIのURL
 - API_TOKEN: カスタムコマンド管理APIのトークン
+- IMM_BINARY: IMM CLIのパス（省略時 `imm`）
+- IMM_TIMEOUT_MS: IMM実行タイムアウトms（省略時 `3000`）
+- IMM_MAX_SOURCE_BYTES: IMMソース上限（省略時 `65536`）
+- IMM_MAX_OUTPUT_BYTES: IMM出力上限（省略時 `65536`）
 
 ## 起動方法(ローカル)
 
@@ -49,6 +53,9 @@ go build -o nkmzbot cmd/nkmzbot/main.go
   - `name`: コマンド名
 - `/list` - 登録されているコマンド一覧を表示
 - `/ramdom` - 登録されているコマンドからランダムに1つ返答
+- `/imm run` - IMMコードをその場で実行
+- `/imm check` - IMMコードを構文チェック
+- `/imm command add|update|remove` - IMMカスタムコマンドを管理
 
 ### その他のコマンド
 - `/jikan` - スケジュール実行を管理
@@ -56,6 +63,7 @@ go build -o nkmzbot cmd/nkmzbot/main.go
 - `/guess` - ジオゲッサーを開始・プレイ
 - `/wallet` - Wallet API を使って送金・請求を記録
 - `Register as Response` - メッセージコンテキストメニュー（メッセージを右クリックしてコマンドとして登録）
+- `Run as IMM` - メッセージコンテキストメニュー（メッセージ本文をIMMとして実行）
 
 `/wallet` は以下のサブコマンドを提供します。
 
@@ -64,4 +72,4 @@ go build -o nkmzbot cmd/nkmzbot/main.go
 
 Wallet API への呼び出しでは既存の `API_TOKEN` を使い、操作ユーザーの Discord ID を `X-Discord-User-ID` ヘッダーで渡します。バックエンド側で Discord ID から Wallet 利用者を特定できる必要があります。
 
-登録したコマンドは `!コマンド名` で呼び出せます。
+登録したコマンドは `!コマンド名` で呼び出せます。IMMコマンドは `!コマンド名 引数...` の形で引数を渡せます。IMM側では `bot_args`、`bot_raw`、`bot_user_id`、`bot_channel_id`、`bot_guild_id` を参照できます。
