@@ -4,6 +4,10 @@ services:
     container_name: nkmzbot
     env_file:
       - .env
+    environment:
+      IMM_BINARY: /usr/local/bin/imm
+    volumes:
+      - ${IMM_BINARY:?Set IMM_BINARY in .env to the host path of the Linux IMM binary}:/usr/local/bin/imm:ro
     ports:
       - "3021:3021"
     restart: always
