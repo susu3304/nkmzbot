@@ -15,6 +15,11 @@ import (
 	"github.com/susu3304/nkmzbot/internal/imm"
 )
 
+const (
+	textCommandKind = "text"
+	immCommandKind  = "imm"
+)
+
 func (b *Bot) onReady(s *discordgo.Session, event *discordgo.Ready) {
 	log.Printf("%s is connected!", event.User.Username)
 
@@ -52,16 +57,20 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 	}
 
 	content := strings.TrimSpace(m.Content)
-	if strings.HasPrefix(content, "!") && len(content) > 1 {
-		commandText := strings.TrimSpace(content[1:])
-		if m.GuildID != "" {
-			b.handleCustomCommandMessage(s, m, commandText)
-		}
+	if m.GuildID == "" {
+		return
+	}
+
+	switch {
+	case strings.HasPrefix(content, "!") && len(content) > 1:
+		b.handleCustomCommandMessage(s, m, strings.TrimSpace(content[1:]), textCommandKind)
+	case strings.HasPrefix(content, "?") && len(content) > 1:
+		b.handleCustomCommandMessage(s, m, strings.TrimSpace(content[1:]), immCommandKind)
 	}
 }
 
-func (b *Bot) handleCustomCommandMessage(s *discordgo.Session, m *discordgo.MessageCreate, commandText string) {
-	cmdName, cmd, rawArgs, args, err := b.lookupMessageCommand(m.GuildID, commandText)
+func (b *Bot) handleCustomCommandMessage(s *discordgo.Session, m *discordgo.MessageCreate, commandText, expectedKind string) {
+	cmdName, cmd, rawArgs, args, err := b.lookupMessageCommand(m.GuildID, commandText, expectedKind)
 	if err != nil || cmd == nil {
 		return
 	}
@@ -85,12 +94,12 @@ func (b *Bot) handleCustomCommandMessage(s *discordgo.Session, m *discordgo.Mess
 	}
 }
 
-func (b *Bot) lookupMessageCommand(guildID, commandText string) (string, *client.BotCommandResponse, string, []string, error) {
+func (b *Bot) lookupMessageCommand(guildID, commandText, expectedKind string) (string, *client.BotCommandResponse, string, []string, error) {
 	cmd, err := b.client.GetCommand(guildID, commandText)
 	if err != nil {
 		return "", nil, "", nil, err
 	}
-	if cmd != nil {
+	if commandKindMatches(cmd, expectedKind) {
 		return commandText, cmd, "", nil, nil
 	}
 
@@ -102,11 +111,28 @@ func (b *Bot) lookupMessageCommand(guildID, commandText string) (string, *client
 	if err != nil || cmd == nil {
 		return "", nil, "", nil, err
 	}
+	if !commandKindMatches(cmd, expectedKind) {
+		return "", nil, "", nil, nil
+	}
+	if !strings.EqualFold(expectedKind, immCommandKind) {
+		return name, cmd, "", nil, nil
+	}
 	args, err := imm.SplitArgs(rawArgs)
 	if err != nil {
 		return "", nil, "", nil, err
 	}
 	return name, cmd, rawArgs, args, nil
+}
+
+func commandKindMatches(cmd *client.BotCommandResponse, expectedKind string) bool {
+	if cmd == nil {
+		return false
+	}
+	kind := cmd.Kind
+	if kind == "" {
+		kind = textCommandKind
+	}
+	return strings.EqualFold(kind, expectedKind)
 }
 
 func splitCommandText(commandText string) (string, string) {

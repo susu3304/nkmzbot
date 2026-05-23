@@ -54,7 +54,7 @@ go build -o nkmzbot cmd/nkmzbot/main.go
 - `/remove` - コマンドを削除
   - `name`: コマンド名
 - `/list` - 登録されているコマンド一覧を表示
-- `/ramdom` - 登録されているコマンドからランダムに1つ返答
+- `/ramdom` - 登録されている通常コマンドからランダムに1つ返答（IMMコマンドは対象外）
 - `/imm run` - IMMコードをその場で実行
 - `/imm check` - IMMコードを構文チェック
 - `/imm command add|update|remove` - IMMカスタムコマンドを管理
@@ -74,7 +74,7 @@ go build -o nkmzbot cmd/nkmzbot/main.go
 
 Wallet API への呼び出しでは既存の `API_TOKEN` を使い、操作ユーザーの Discord ID を `X-Discord-User-ID` ヘッダーで渡します。バックエンド側で Discord ID から Wallet 利用者を特定できる必要があります。
 
-登録したコマンドは `!コマンド名` で呼び出せます。IMMコマンドは `!コマンド名 引数...` の形で引数を渡せます。IMM側では `bot_args`、`bot_raw`、`bot_user_id`、`bot_channel_id`、`bot_guild_id` を参照できます。
+登録した通常コマンドは `!コマンド名` で呼び出せます。IMMコマンドは `?コマンド名 引数...` の形で呼び出し、引数を渡せます。IMM側では `bot_args`、`bot_raw`、`bot_user_id`、`bot_channel_id`、`bot_guild_id` を参照できます。
 
 メッセージ右クリックからは以下を使えます。
 

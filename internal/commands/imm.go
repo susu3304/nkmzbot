@@ -160,7 +160,7 @@ func HandleRegisterMessageAsIMMModalSubmit(s *discordgo.Session, i *discordgo.In
 		respondText(s, i, "IMM runner is not configured.")
 		return
 	}
-	name := strings.TrimPrefix(strings.TrimSpace(modalInputValue(data, "command_name")), "!")
+	name := normalizeImmCommandName(modalInputValue(data, "command_name"))
 	if name == "" {
 		respondText(s, i, "コマンド名が入力されていません。")
 		return
@@ -202,7 +202,7 @@ func HandleRegisterMessageAsIMMModalSubmit(s *discordgo.Session, i *discordgo.In
 		}
 		return
 	}
-	editInteraction(s, i, fmt.Sprintf("IMMコマンド `!%s` を追加しました。", name))
+	editInteraction(s, i, fmt.Sprintf("IMMコマンド `?%s` を追加しました。", name))
 }
 
 func handleImmCommandGroup(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client.Client, runner *imm.Runner, group *discordgo.ApplicationCommandInteractionDataOption) {
@@ -214,7 +214,7 @@ func handleImmCommandGroup(s *discordgo.Session, i *discordgo.InteractionCreate,
 	sub := group.Options[0]
 	switch sub.Name {
 	case "add", "update":
-		name := strings.TrimPrefix(strings.TrimSpace(stringOptionValue(sub.Options, "name")), "!")
+		name := normalizeImmCommandName(stringOptionValue(sub.Options, "name"))
 		source := stringOptionValue(sub.Options, "source")
 		tags := parseTags(stringOptionValue(sub.Options, "tags"))
 		if name == "" || strings.TrimSpace(source) == "" {
@@ -255,9 +255,9 @@ func handleImmCommandGroup(s *discordgo.Session, i *discordgo.InteractionCreate,
 		if sub.Name == "update" {
 			action = "更新"
 		}
-		editInteraction(s, i, fmt.Sprintf("IMMコマンド `!%s` を%sしました。", name, action))
+		editInteraction(s, i, fmt.Sprintf("IMMコマンド `?%s` を%sしました。", name, action))
 	case "remove":
-		name := strings.TrimPrefix(strings.TrimSpace(stringOptionValue(sub.Options, "name")), "!")
+		name := normalizeImmCommandName(stringOptionValue(sub.Options, "name"))
 		if name == "" {
 			respondText(s, i, "nameが必要です。")
 			return
@@ -271,10 +271,14 @@ func handleImmCommandGroup(s *discordgo.Session, i *discordgo.InteractionCreate,
 			}
 			return
 		}
-		respondText(s, i, fmt.Sprintf("IMMコマンド `!%s` を削除しました。", name))
+		respondText(s, i, fmt.Sprintf("IMMコマンド `?%s` を削除しました。", name))
 	default:
 		respondText(s, i, "未知のIMM commandサブコマンドです。")
 	}
+}
+
+func normalizeImmCommandName(name string) string {
+	return strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(name), "!?"))
 }
 
 func runImmInteraction(s *discordgo.Session, i *discordgo.InteractionCreate, runner *imm.Runner, source, rawArgs string, trace bool) {
