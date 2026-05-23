@@ -14,9 +14,11 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o nkmzbot cmd/nkmzbot/main.go
 
 # Runtime stage
-FROM alpine:latest
+FROM ubuntu:24.04
 
-RUN apk --no-cache add ca-certificates
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -25,6 +27,9 @@ COPY --from=builder /app/nkmzbot .
 
 # Copy migrations
 COPY migrations ./migrations
+
+# docker-compose.yml mounts the host IMM binary here.
+ENV IMM_BINARY=/usr/local/bin/imm
 
 # Run the application
 CMD ["./nkmzbot"]

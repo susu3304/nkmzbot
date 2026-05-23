@@ -8,7 +8,7 @@ Discord bot for managing custom commands.
 - DATABASE_URL: Postgres 接続文字列
 - API_URL: カスタムコマンド管理APIのURL
 - API_TOKEN: カスタムコマンド管理APIのトークン
-- IMM_BINARY: IMM CLIのパス（省略時 `imm`）
+- IMM_BINARY: IMM CLIのパス（省略時 `imm`）。Docker Composeではホスト側のLinux IMMバイナリの絶対パス
 - IMM_TIMEOUT_MS: IMM実行タイムアウトms（省略時 `3000`）
 - IMM_MAX_SOURCE_BYTES: IMMソース上限（省略時 `65536`）
 - IMM_MAX_OUTPUT_BYTES: IMM出力上限（省略時 `65536`）
@@ -21,13 +21,15 @@ Discord bot for managing custom commands.
 ## Docker
 
 ```bash
-# 例
-DISCORD_TOKEN=... \
-DATABASE_URL=postgres://... \
-API_URL=... \
-API_TOKEN=... \
-go run cmd/nkmzbot/main.go
+cp .env.sample .env
+# .env の IMM_BINARY をサーバー上のLinux IMMバイナリの絶対パスにする
+docker compose build
+docker compose up -d
 ```
+
+Docker Composeでは `.env` の `IMM_BINARY` をホスト側のバイナリとして
+`/usr/local/bin/imm` にbind mountし、botには `IMM_BINARY=/usr/local/bin/imm`
+として渡します。
 
 ## ビルド
 

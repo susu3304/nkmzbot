@@ -44,7 +44,22 @@ cat ~/.ssh/github_deploy_key
 4. Value: コピーした秘密鍵を貼り付け
 5. Add secret をクリック
 
-## 3. デプロイフロー
+## 3. サーバー側の `.env`
+
+`docker-compose.yml` は `.env` の `IMM_BINARY` をホスト側のLinux IMMバイナリとして
+コンテナ内の `/usr/local/bin/imm` にbind mountします。
+
+```env
+IMM_BINARY=/usr/local/bin/imm
+```
+
+IMMを別の場所に入れている場合は、その絶対パスを指定してください。
+
+```env
+IMM_BINARY=/home/wabu/.cargo/bin/imm-native
+```
+
+## 4. デプロイフロー
 
 ```
 mainブランチにマージ
@@ -64,7 +79,7 @@ docker compose up -d
 デプロイ完了 ✅
 ```
 
-## 4. 動作確認
+## 5. 動作確認
 
 ### 手動で試す場合
 
@@ -85,7 +100,7 @@ docker compose ps
 3. "Deploy" ワークフローが実行されることを確認
 4. ログを確認して成功を確認
 
-## 5. トラブルシューティング
+## 6. トラブルシューティング
 
 ### SSH接続エラーの場合
 
@@ -115,14 +130,14 @@ Name: DEPLOY_PATH
 Value: /path/to/your/nkmzbot
 ```
 
-## 6. セキュリティ注意事項
+## 7. セキュリティ注意事項
 
 - SSH秘密鍵は**絶対に**コミットしない
 - GitHub Secretsに保存した秘密鍵は暗号化されて保存される
 - デプロイ用の鍵は専用のものを使用し、他の用途と混在させない
 - 可能であれば、SSHポートをデフォルトの22から変更することを推奨
 
-## 7. デプロイの無効化
+## 8. デプロイの無効化
 
 自動デプロイを一時的に停止したい場合：
 - リポジトリの Settings → Actions → Disable workflow を選択
