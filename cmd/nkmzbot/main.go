@@ -10,6 +10,7 @@ import (
 	"github.com/susu3304/nkmzbot/internal/bot"
 	"github.com/susu3304/nkmzbot/internal/config"
 	"github.com/susu3304/nkmzbot/internal/db"
+	"github.com/susu3304/nkmzbot/internal/imm"
 )
 
 func main() {
@@ -31,8 +32,13 @@ func main() {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
 
+	immRunner := imm.NewRunner(cfg.IMMBinaryPath)
+	immRunner.Timeout = cfg.IMMTimeout
+	immRunner.MaxSourceBytes = cfg.IMMMaxSourceBytes
+	immRunner.MaxOutputBytes = cfg.IMMMaxOutputBytes
+
 	// Initialize Discord bot
-	discordBot, err := bot.New(cfg.DiscordToken, cfg.APIURL, cfg.APIToken, database)
+	discordBot, err := bot.New(cfg.DiscordToken, cfg.APIURL, cfg.APIToken, database, immRunner)
 	if err != nil {
 		log.Fatalf("Failed to create discord bot: %v", err)
 	}

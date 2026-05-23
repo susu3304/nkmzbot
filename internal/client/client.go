@@ -112,6 +112,7 @@ func expectStatus(resp *http.Response, allowed ...int) error {
 type CommandRecord struct {
 	GuildID   string   `json:"guildId"`
 	Name      string   `json:"name"`
+	Kind      string   `json:"kind"`
 	Response  string   `json:"response"`
 	Tags      []string `json:"tags,omitempty"`
 	CreatedAt string   `json:"createdAt"`
@@ -123,38 +124,59 @@ type CommandsListResponse struct {
 
 type BotCommandResponse struct {
 	Response string `json:"response"`
+	Kind     string `json:"kind"`
 }
 
 func (c *Client) GetCommandResponse(guildID, name string) (string, error) {
-	resp, err := c.doRequest("GET", fmt.Sprintf("/bot/guilds/%s/commands/%s", guildID, name), nil)
+	cmdResp, err := c.GetCommand(guildID, name)
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
-		return "", nil // Or custom error
-	}
-	if err := expectStatus(resp, http.StatusOK); err != nil {
-		return "", err
-	}
-
-	var cmdResp BotCommandResponse
-	if err := json.NewDecoder(resp.Body).Decode(&cmdResp); err != nil {
-		return "", err
+	if cmdResp == nil {
+		return "", nil
 	}
 	return cmdResp.Response, nil
 }
 
+func (c *Client) GetCommand(guildID, name string) (*BotCommandResponse, error) {
+	resp, err := c.doRequest("GET", fmt.Sprintf("/bot/guilds/%s/commands/%s", url.PathEscape(guildID), url.PathEscape(name)), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	if err := expectStatus(resp, http.StatusOK); err != nil {
+		return nil, err
+	}
+
+	var cmdResp BotCommandResponse
+	if err := json.NewDecoder(resp.Body).Decode(&cmdResp); err != nil {
+		return nil, err
+	}
+	if cmdResp.Kind == "" {
+		cmdResp.Kind = "text"
+	}
+	return &cmdResp, nil
+}
+
 type commandWriteRequest struct {
 	Name     string   `json:"name"`
+	Kind     string   `json:"kind,omitempty"`
 	Response string   `json:"response"`
 	Tags     []string `json:"tags,omitempty"`
 }
 
 func (c *Client) AddCommand(guildID, name, response string, tags ...string) error {
+	return c.AddCommandWithKind(guildID, name, response, "text", tags...)
+}
+
+func (c *Client) AddCommandWithKind(guildID, name, response, kind string, tags ...string) error {
 	body := commandWriteRequest{
 		Name:     name,
+		Kind:     kind,
 		Response: response,
 		Tags:     normalizeTags(tags),
 	}
@@ -187,8 +209,13 @@ func (c *Client) RemoveCommand(guildID, name string) error {
 }
 
 func (c *Client) UpdateCommand(guildID, name, response string, tags ...string) error {
+	return c.UpdateCommandWithKind(guildID, name, response, "text", tags...)
+}
+
+func (c *Client) UpdateCommandWithKind(guildID, name, response, kind string, tags ...string) error {
 	body := commandWriteRequest{
 		Name:     name,
+		Kind:     kind,
 		Response: response,
 		Tags:     normalizeTags(tags),
 	}

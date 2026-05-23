@@ -6,10 +6,13 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
+	"unicode"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/susu3304/nkmzbot/internal/client"
 	"github.com/susu3304/nkmzbot/internal/commands"
+	"github.com/susu3304/nkmzbot/internal/imm"
 )
 
 func (b *Bot) onReady(s *discordgo.Session, event *discordgo.Ready) {
@@ -50,22 +53,92 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 
 	content := strings.TrimSpace(m.Content)
 	if strings.HasPrefix(content, "!") && len(content) > 1 {
-		cmdName := content[1:]
+		commandText := strings.TrimSpace(content[1:])
 		if m.GuildID != "" {
-			resp, err := b.client.GetCommandResponse(m.GuildID, cmdName)
-			if err == nil && resp != "" {
-				if _, err := s.ChannelMessageSend(m.ChannelID, resp); err == nil {
-					go func() {
-						_ = b.client.RecordCommandUsage(m.GuildID, cmdName, client.CommandUsageInput{
-							ActorID:   m.Author.ID,
-							ChannelID: m.ChannelID,
-							Source:    "bot-message",
-						})
-					}()
-				}
-			}
+			b.handleCustomCommandMessage(s, m, commandText)
 		}
 	}
+}
+
+func (b *Bot) handleCustomCommandMessage(s *discordgo.Session, m *discordgo.MessageCreate, commandText string) {
+	cmdName, cmd, rawArgs, args, err := b.lookupMessageCommand(m.GuildID, commandText)
+	if err != nil || cmd == nil {
+		return
+	}
+
+	response := cmd.Response
+	if strings.EqualFold(cmd.Kind, "imm") {
+		response = b.runImmCommandForMessage(m, cmd.Response, rawArgs, args)
+	}
+	if strings.TrimSpace(response) == "" {
+		return
+	}
+
+	if _, err := s.ChannelMessageSend(m.ChannelID, response); err == nil {
+		go func() {
+			_ = b.client.RecordCommandUsage(m.GuildID, cmdName, client.CommandUsageInput{
+				ActorID:   m.Author.ID,
+				ChannelID: m.ChannelID,
+				Source:    "bot-message",
+			})
+		}()
+	}
+}
+
+func (b *Bot) lookupMessageCommand(guildID, commandText string) (string, *client.BotCommandResponse, string, []string, error) {
+	cmd, err := b.client.GetCommand(guildID, commandText)
+	if err != nil {
+		return "", nil, "", nil, err
+	}
+	if cmd != nil {
+		return commandText, cmd, "", nil, nil
+	}
+
+	name, rawArgs := splitCommandText(commandText)
+	if name == "" || name == commandText {
+		return "", nil, "", nil, nil
+	}
+	cmd, err = b.client.GetCommand(guildID, name)
+	if err != nil || cmd == nil {
+		return "", nil, "", nil, err
+	}
+	args, err := imm.SplitArgs(rawArgs)
+	if err != nil {
+		return "", nil, "", nil, err
+	}
+	return name, cmd, rawArgs, args, nil
+}
+
+func splitCommandText(commandText string) (string, string) {
+	commandText = strings.TrimSpace(commandText)
+	idx := strings.IndexFunc(commandText, unicode.IsSpace)
+	if idx < 0 {
+		return commandText, ""
+	}
+	return commandText[:idx], strings.TrimSpace(commandText[idx:])
+}
+
+func (b *Bot) runImmCommandForMessage(m *discordgo.MessageCreate, source, rawArgs string, args []string) string {
+	if b.immRunner == nil {
+		return "IMM runner is not configured."
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), b.immRunner.Timeout+time.Second)
+	defer cancel()
+	result, err := b.immRunner.Run(ctx, imm.Request{
+		Source:    source,
+		Args:      args,
+		RawArgs:   rawArgs,
+		UserID:    m.Author.ID,
+		ChannelID: m.ChannelID,
+		GuildID:   m.GuildID,
+	})
+	if err != nil {
+		return "IMM実行に失敗しました: " + err.Error()
+	}
+	if result.ExitCode != 0 || result.TimedOut || result.OutputTruncated {
+		return commands.FormatImmFailure("IMM実行に失敗しました", result)
+	}
+	return commands.FormatImmOutput(result.Stdout)
 }
 
 func (b *Bot) onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -179,8 +252,12 @@ func (b *Bot) handleApplicationCommand(s *discordgo.Session, i *discordgo.Intera
 		commands.HandleWallet(s, i, b.client)
 	case "jikan":
 		commands.HandleJikan(s, i, b.nomikai, b.db, b.client)
+	case "imm":
+		commands.HandleImm(s, i, b.client, b.immRunner)
 	case "Register as Response":
 		commands.HandleRegisterAsResponse(s, i)
+	case "Run as IMM":
+		commands.HandleRunMessageAsIMM(s, i, b.immRunner)
 	}
 }
 
