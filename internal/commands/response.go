@@ -65,7 +65,7 @@ func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, cli
 	case strings.HasPrefix(data.CustomID, modalRegisterResponsePrefix):
 		handleRegisterAsResponseModalSubmit(s, i, cli, data)
 	case strings.HasPrefix(data.CustomID, modalRunMessageAsIMMPrefix):
-		HandleRunMessageAsIMMModalSubmit(s, i, runner, data)
+		HandleRunMessageAsIMMModalSubmit(s, i, cli, runner, data)
 	case strings.HasPrefix(data.CustomID, modalRegisterMessageIMMPrefix):
 		HandleRegisterMessageAsIMMModalSubmit(s, i, cli, runner, data)
 	}

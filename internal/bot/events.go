@@ -6,7 +6,6 @@ import (
 	"log"
 	"strconv"
 	"strings"
-	"time"
 	"unicode"
 
 	"github.com/bwmarrin/discordgo"
@@ -77,7 +76,7 @@ func (b *Bot) handleCustomCommandMessage(s *discordgo.Session, m *discordgo.Mess
 
 	response := cmd.Response
 	if strings.EqualFold(cmd.Kind, "imm") {
-		response = b.runImmCommandForMessage(m, cmd.Response, rawArgs, args)
+		response = b.runImmCommandForMessage(m, cmdName, cmd.Response, rawArgs, args)
 	}
 	if strings.TrimSpace(response) == "" {
 		return
@@ -144,16 +143,24 @@ func splitCommandText(commandText string) (string, string) {
 	return commandText[:idx], strings.TrimSpace(commandText[idx:])
 }
 
-func (b *Bot) runImmCommandForMessage(m *discordgo.MessageCreate, source, rawArgs string, args []string) string {
+func (b *Bot) runImmCommandForMessage(m *discordgo.MessageCreate, name, source, rawArgs string, args []string) string {
 	if b.immRunner == nil {
 		return "IMM runner is not configured."
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), b.immRunner.Timeout+time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), commands.CommandExpansionTimeout(b.immRunner))
 	defer cancel()
+	expanded, err := commands.NewCommandExpander(b.client, b.immRunner, "?"+name).ExpandRequest(ctx, commands.CommandExecutionContext{
+		GuildID:   m.GuildID,
+		ChannelID: m.ChannelID,
+		UserID:    m.Author.ID,
+	}, source, rawArgs, args)
+	if err != nil {
+		return "コマンド展開に失敗しました: " + err.Error()
+	}
 	result, err := b.immRunner.Run(ctx, imm.Request{
-		Source:    source,
-		Args:      args,
-		RawArgs:   rawArgs,
+		Source:    expanded.Source,
+		Args:      expanded.Args,
+		RawArgs:   expanded.RawArgs,
 		UserID:    m.Author.ID,
 		ChannelID: m.ChannelID,
 		GuildID:   m.GuildID,
