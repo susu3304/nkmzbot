@@ -62,3 +62,19 @@ func TestFilterCommandsByTagEmptyTagKeepsAllCommands(t *testing.T) {
 		t.Fatalf("filterCommandsByTag(empty) returned %d commands, want %d", len(got), len(commands))
 	}
 }
+
+func TestFilterRandomEligibleCommandsDropsIMM(t *testing.T) {
+	commands := []client.CommandRecord{
+		{Name: "hello", Kind: "text", Response: "Hello"},
+		{Name: "repeat", Kind: "imm", Response: "squeak bot_args[0]"},
+		{Name: "legacy", Response: "No kind"},
+	}
+
+	got := filterRandomEligibleCommands(commands)
+	if len(got) != 2 {
+		t.Fatalf("filterRandomEligibleCommands() returned %d commands, want 2", len(got))
+	}
+	if got[0].Name != "hello" || got[1].Name != "legacy" {
+		t.Fatalf("filterRandomEligibleCommands() names = [%q, %q], want [hello, legacy]", got[0].Name, got[1].Name)
+	}
+}

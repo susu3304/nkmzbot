@@ -37,7 +37,7 @@ func HandleList(s *discordgo.Session, i *discordgo.InteractionCreate, cli *clien
 	// Build command list
 	var entries []string
 	for _, cmd := range commands {
-		entries = append(entries, fmt.Sprintf("!%s: %s", cmd.Name, cmd.Response))
+		entries = append(entries, fmt.Sprintf("%s%s: %s", commandPrefix(cmd), cmd.Name, cmd.Response))
 	}
 
 	// Split into 2000 character chunks
@@ -63,4 +63,11 @@ func HandleList(s *discordgo.Session, i *discordgo.InteractionCreate, cli *clien
 			Content: "コマンド一覧を送信しました。",
 		},
 	})
+}
+
+func commandPrefix(cmd client.CommandRecord) string {
+	if strings.EqualFold(strings.TrimSpace(cmd.Kind), "imm") {
+		return "?"
+	}
+	return "!"
 }

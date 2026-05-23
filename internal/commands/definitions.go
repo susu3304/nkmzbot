@@ -57,7 +57,7 @@ func GetCommands() []*discordgo.ApplicationCommand {
 								{
 									Type:        discordgo.ApplicationCommandOptionString,
 									Name:        "name",
-									Description: "コマンド名（!は不要）",
+									Description: "コマンド名（?は不要）",
 									Required:    true,
 								},
 								{

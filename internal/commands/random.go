@@ -26,6 +26,7 @@ func HandleRandom(s *discordgo.Session, i *discordgo.InteractionCreate, cli *cli
 		return
 	}
 
+	commands = filterRandomEligibleCommands(commands)
 	commands = filterCommandsByTag(commands, tag)
 	command, ok := pickRandomCommand(commands)
 	if !ok {
@@ -48,6 +49,17 @@ func HandleRandom(s *discordgo.Session, i *discordgo.InteractionCreate, cli *cli
 			Content: command.Response,
 		},
 	})
+}
+
+func filterRandomEligibleCommands(commands []client.CommandRecord) []client.CommandRecord {
+	filtered := make([]client.CommandRecord, 0, len(commands))
+	for _, cmd := range commands {
+		if strings.EqualFold(strings.TrimSpace(cmd.Kind), "imm") {
+			continue
+		}
+		filtered = append(filtered, cmd)
+	}
+	return filtered
 }
 
 func pickRandomCommand(commands []client.CommandRecord) (client.CommandRecord, bool) {
