@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/susu3304/nkmzbot/internal/client"
@@ -27,10 +26,10 @@ func HandleImm(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client
 	case "run":
 		source := stringOptionValue(top.Options, "source")
 		rawArgs := stringOptionValue(top.Options, "args")
-		runImmInteraction(s, i, runner, source, rawArgs, false)
+		runImmInteraction(s, i, cli, runner, source, rawArgs, false)
 	case "check":
 		source := stringOptionValue(top.Options, "source")
-		checkImmInteraction(s, i, runner, source)
+		checkImmInteraction(s, i, cli, runner, source)
 	case "command":
 		handleImmCommandGroup(s, i, cli, runner, top)
 	default:
@@ -136,7 +135,7 @@ func showRegisterMessageAsIMMModal(s *discordgo.Session, i *discordgo.Interactio
 	})
 }
 
-func HandleRunMessageAsIMMModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, runner *imm.Runner, data discordgo.ModalSubmitInteractionData) {
+func HandleRunMessageAsIMMModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client.Client, runner *imm.Runner, data discordgo.ModalSubmitInteractionData) {
 	if runner == nil {
 		respondText(s, i, "IMM runner is not configured.")
 		return
@@ -152,7 +151,7 @@ func HandleRunMessageAsIMMModalSubmit(s *discordgo.Session, i *discordgo.Interac
 		return
 	}
 
-	runImmInteraction(s, i, runner, message.Content, modalInputValue(data, "imm_args"), false)
+	runImmInteraction(s, i, cli, runner, message.Content, modalInputValue(data, "imm_args"), false)
 }
 
 func HandleRegisterMessageAsIMMModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client.Client, runner *imm.Runner, data discordgo.ModalSubmitInteractionData) {
@@ -182,9 +181,14 @@ func HandleRegisterMessageAsIMMModalSubmit(s *discordgo.Session, i *discordgo.In
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), runner.Timeout+time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), CommandExpansionTimeout(runner))
 	defer cancel()
-	check, err := runner.Check(ctx, immRequest(i, source, "", nil))
+	expanded, err := NewCommandExpander(cli, runner).ExpandRequest(ctx, interactionExecutionContext(i), source, "", nil)
+	if err != nil {
+		editInteraction(s, i, "コマンド展開に失敗しました: "+err.Error())
+		return
+	}
+	check, err := runner.Check(ctx, immRequest(i, expanded.Source, expanded.RawArgs, expanded.Args))
 	if err != nil {
 		editInteraction(s, i, "IMMチェックに失敗しました: "+err.Error())
 		return
@@ -225,9 +229,14 @@ func handleImmCommandGroup(s *discordgo.Session, i *discordgo.InteractionCreate,
 		if !deferInteraction(s, i) {
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), runner.Timeout+time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), CommandExpansionTimeout(runner))
 		defer cancel()
-		check, err := runner.Check(ctx, immRequest(i, source, "", nil))
+		expanded, err := NewCommandExpander(cli, runner).ExpandRequest(ctx, interactionExecutionContext(i), source, "", nil)
+		if err != nil {
+			editInteraction(s, i, "コマンド展開に失敗しました: "+err.Error())
+			return
+		}
+		check, err := runner.Check(ctx, immRequest(i, expanded.Source, expanded.RawArgs, expanded.Args))
 		if err != nil {
 			editInteraction(s, i, "IMMチェックに失敗しました: "+err.Error())
 			return
@@ -281,7 +290,7 @@ func normalizeImmCommandName(name string) string {
 	return strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(name), "!?"))
 }
 
-func runImmInteraction(s *discordgo.Session, i *discordgo.InteractionCreate, runner *imm.Runner, source, rawArgs string, trace bool) {
+func runImmInteraction(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client.Client, runner *imm.Runner, source, rawArgs string, trace bool) {
 	args, err := imm.SplitArgs(rawArgs)
 	if err != nil {
 		respondText(s, i, "argsの解釈に失敗しました: "+err.Error())
@@ -291,9 +300,14 @@ func runImmInteraction(s *discordgo.Session, i *discordgo.InteractionCreate, run
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), runner.Timeout+time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), CommandExpansionTimeout(runner))
 	defer cancel()
-	req := immRequest(i, source, rawArgs, args)
+	expanded, err := NewCommandExpander(cli, runner).ExpandRequest(ctx, interactionExecutionContext(i), source, rawArgs, args)
+	if err != nil {
+		editInteraction(s, i, "コマンド展開に失敗しました: "+err.Error())
+		return
+	}
+	req := immRequest(i, expanded.Source, expanded.RawArgs, expanded.Args)
 	req.Trace = trace
 	result, err := runner.Run(ctx, req)
 	if err != nil {
@@ -307,14 +321,19 @@ func runImmInteraction(s *discordgo.Session, i *discordgo.InteractionCreate, run
 	editInteraction(s, i, FormatImmOutput(result.Stdout))
 }
 
-func checkImmInteraction(s *discordgo.Session, i *discordgo.InteractionCreate, runner *imm.Runner, source string) {
+func checkImmInteraction(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client.Client, runner *imm.Runner, source string) {
 	if !deferInteraction(s, i) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), runner.Timeout+time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), CommandExpansionTimeout(runner))
 	defer cancel()
-	result, err := runner.Check(ctx, immRequest(i, source, "", nil))
+	expanded, err := NewCommandExpander(cli, runner).ExpandRequest(ctx, interactionExecutionContext(i), source, "", nil)
+	if err != nil {
+		editInteraction(s, i, "コマンド展開に失敗しました: "+err.Error())
+		return
+	}
+	result, err := runner.Check(ctx, immRequest(i, expanded.Source, expanded.RawArgs, expanded.Args))
 	if err != nil {
 		editInteraction(s, i, "IMMチェックに失敗しました: "+err.Error())
 		return
@@ -324,6 +343,29 @@ func checkImmInteraction(s *discordgo.Session, i *discordgo.InteractionCreate, r
 		return
 	}
 	editInteraction(s, i, "IMM check OK")
+}
+
+func NewCommandExpander(cli *client.Client, runner *imm.Runner, stack ...string) CommandExpander {
+	return CommandExpander{
+		Client:   cli,
+		Runner:   runner,
+		MaxDepth: DefaultCommandExpansionLimit,
+		Stack:    stack,
+	}
+}
+
+func interactionExecutionContext(i *discordgo.InteractionCreate) CommandExecutionContext {
+	userID := ""
+	if i.Member != nil && i.Member.User != nil {
+		userID = i.Member.User.ID
+	} else if i.User != nil {
+		userID = i.User.ID
+	}
+	return CommandExecutionContext{
+		GuildID:   i.GuildID,
+		ChannelID: i.ChannelID,
+		UserID:    userID,
+	}
 }
 
 func immRequest(i *discordgo.InteractionCreate, source, rawArgs string, args []string) imm.Request {
