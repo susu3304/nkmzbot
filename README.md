@@ -75,3 +75,8 @@ go build -o nkmzbot cmd/nkmzbot/main.go
 Wallet API への呼び出しでは既存の `API_TOKEN` を使い、操作ユーザーの Discord ID を `X-Discord-User-ID` ヘッダーで渡します。バックエンド側で Discord ID から Wallet 利用者を特定できる必要があります。
 
 登録したコマンドは `!コマンド名` で呼び出せます。IMMコマンドは `!コマンド名 引数...` の形で引数を渡せます。IMM側では `bot_args`、`bot_raw`、`bot_user_id`、`bot_channel_id`、`bot_guild_id` を参照できます。
+
+メッセージ右クリックからは以下を使えます。
+
+- `Run as IMM`: 選択したメッセージ本文をIMMとして実行します。モーダルで引数を入力できます
+- `Register as IMM`: 選択したメッセージ本文をIMMカスタムコマンドとして登録します

@@ -528,6 +528,10 @@ func GetCommands() []*discordgo.ApplicationCommand {
 			Type: discordgo.MessageApplicationCommand,
 		},
 		{
+			Name: "Register as IMM",
+			Type: discordgo.MessageApplicationCommand,
+		},
+		{
 			Name: "Run as IMM",
 			Type: discordgo.MessageApplicationCommand,
 		},

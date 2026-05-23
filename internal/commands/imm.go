@@ -44,22 +44,165 @@ func HandleRunMessageAsIMM(s *discordgo.Session, i *discordgo.InteractionCreate,
 		return
 	}
 	data := i.ApplicationCommandData()
-	if data.Resolved == nil || len(data.Resolved.Messages) == 0 {
+	message := selectedResolvedMessage(data)
+	if message == nil {
 		respondText(s, i, "メッセージが見つかりませんでした。")
 		return
 	}
-
-	var message *discordgo.Message
-	for _, msg := range data.Resolved.Messages {
-		message = msg
-		break
-	}
-	if message == nil || strings.TrimSpace(message.Content) == "" {
+	if strings.TrimSpace(message.Content) == "" {
 		respondText(s, i, "IMMとして実行できる本文がありません。")
 		return
 	}
 
-	runImmInteraction(s, i, runner, message.Content, "", false)
+	showRunMessageAsIMMModal(s, i, message.ID)
+}
+
+func HandleRegisterMessageAsIMM(s *discordgo.Session, i *discordgo.InteractionCreate, runner *imm.Runner) {
+	if runner == nil {
+		respondText(s, i, "IMM runner is not configured.")
+		return
+	}
+	data := i.ApplicationCommandData()
+	message := selectedResolvedMessage(data)
+	if message == nil {
+		respondText(s, i, "メッセージが見つかりませんでした。")
+		return
+	}
+	if strings.TrimSpace(message.Content) == "" {
+		respondText(s, i, "IMMコマンドとして登録できる本文がありません。")
+		return
+	}
+
+	showRegisterMessageAsIMMModal(s, i, message.ID)
+}
+
+func showRunMessageAsIMMModal(s *discordgo.Session, i *discordgo.InteractionCreate, messageID string) {
+	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseModal,
+		Data: &discordgo.InteractionResponseData{
+			CustomID: modalRunMessageAsIMMPrefix + messageID,
+			Title:    "IMMを実行",
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.TextInput{
+							CustomID:    "imm_args",
+							Label:       "引数",
+							Style:       discordgo.TextInputShort,
+							Placeholder: `例: a "hello world"`,
+							Required:    false,
+							MaxLength:   1000,
+						},
+					},
+				},
+			},
+		},
+	})
+}
+
+func showRegisterMessageAsIMMModal(s *discordgo.Session, i *discordgo.InteractionCreate, messageID string) {
+	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseModal,
+		Data: &discordgo.InteractionResponseData{
+			CustomID: modalRegisterMessageIMMPrefix + messageID,
+			Title:    "IMMコマンドを登録",
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.TextInput{
+							CustomID:    "command_name",
+							Label:       "コマンド名",
+							Style:       discordgo.TextInputShort,
+							Placeholder: "例: repeat",
+							Required:    true,
+							MaxLength:   50,
+						},
+					},
+				},
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.TextInput{
+							CustomID:    "tags",
+							Label:       "タグ",
+							Style:       discordgo.TextInputShort,
+							Placeholder: "例: imm utility",
+							Required:    false,
+							MaxLength:   200,
+						},
+					},
+				},
+			},
+		},
+	})
+}
+
+func HandleRunMessageAsIMMModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, runner *imm.Runner, data discordgo.ModalSubmitInteractionData) {
+	if runner == nil {
+		respondText(s, i, "IMM runner is not configured.")
+		return
+	}
+	messageID := strings.TrimPrefix(data.CustomID, modalRunMessageAsIMMPrefix)
+	message, err := s.ChannelMessage(i.ChannelID, messageID)
+	if err != nil {
+		respondText(s, i, "メッセージの取得に失敗しました。")
+		return
+	}
+	if strings.TrimSpace(message.Content) == "" {
+		respondText(s, i, "IMMとして実行できる本文がありません。")
+		return
+	}
+
+	runImmInteraction(s, i, runner, message.Content, modalInputValue(data, "imm_args"), false)
+}
+
+func HandleRegisterMessageAsIMMModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client.Client, runner *imm.Runner, data discordgo.ModalSubmitInteractionData) {
+	if runner == nil {
+		respondText(s, i, "IMM runner is not configured.")
+		return
+	}
+	name := strings.TrimPrefix(strings.TrimSpace(modalInputValue(data, "command_name")), "!")
+	if name == "" {
+		respondText(s, i, "コマンド名が入力されていません。")
+		return
+	}
+
+	messageID := strings.TrimPrefix(data.CustomID, modalRegisterMessageIMMPrefix)
+	message, err := s.ChannelMessage(i.ChannelID, messageID)
+	if err != nil {
+		respondText(s, i, "メッセージの取得に失敗しました。")
+		return
+	}
+	source := message.Content
+	if strings.TrimSpace(source) == "" {
+		respondText(s, i, "IMMコマンドとして登録できる本文がありません。")
+		return
+	}
+
+	if !deferInteraction(s, i) {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), runner.Timeout+time.Second)
+	defer cancel()
+	check, err := runner.Check(ctx, immRequest(i, source, "", nil))
+	if err != nil {
+		editInteraction(s, i, "IMMチェックに失敗しました: "+err.Error())
+		return
+	}
+	if check.ExitCode != 0 || check.TimedOut || check.OutputTruncated {
+		editInteraction(s, i, FormatImmFailure("IMMチェックに失敗しました", check))
+		return
+	}
+
+	if err := cli.AddCommandWithKind(i.GuildID, name, source, "imm", parseTags(modalInputValue(data, "tags"))...); err != nil {
+		if client.IsConnectionError(err) {
+			editInteraction(s, i, apiConnectionErrorMessage)
+		} else {
+			editInteraction(s, i, "IMMコマンドの保存に失敗しました: "+err.Error())
+		}
+		return
+	}
+	editInteraction(s, i, fmt.Sprintf("IMMコマンド `!%s` を追加しました。", name))
 }
 
 func handleImmCommandGroup(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client.Client, runner *imm.Runner, group *discordgo.ApplicationCommandInteractionDataOption) {

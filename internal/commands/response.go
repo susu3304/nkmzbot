@@ -6,13 +6,21 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/susu3304/nkmzbot/internal/client"
+	"github.com/susu3304/nkmzbot/internal/imm"
+)
+
+const (
+	modalRegisterResponsePrefix   = "reg_resp:"
+	modalRunMessageAsIMMPrefix    = "imm_run_msg:"
+	modalRegisterMessageIMMPrefix = "imm_reg_msg:"
 )
 
 func HandleRegisterAsResponse(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	data := i.ApplicationCommandData()
 
 	// Get the message from the interaction
-	if data.Resolved == nil || len(data.Resolved.Messages) == 0 {
+	message := selectedResolvedMessage(data)
+	if message == nil {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
@@ -22,14 +30,8 @@ func HandleRegisterAsResponse(s *discordgo.Session, i *discordgo.InteractionCrea
 		return
 	}
 
-	var message *discordgo.Message
-	for _, msg := range data.Resolved.Messages {
-		message = msg
-		break
-	}
-
 	// Show modal to get command name
-	customID := "reg_resp:" + message.ID
+	customID := modalRegisterResponsePrefix + message.ID
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseModal,
 		Data: &discordgo.InteractionResponseData{
@@ -57,27 +59,23 @@ func HandleRegisterAsResponse(s *discordgo.Session, i *discordgo.InteractionCrea
 	}
 }
 
-func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client.Client) {
+func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client.Client, runner *imm.Runner) {
 	data := i.ModalSubmitData()
-	if !strings.HasPrefix(data.CustomID, "reg_resp:") {
-		return
+	switch {
+	case strings.HasPrefix(data.CustomID, modalRegisterResponsePrefix):
+		handleRegisterAsResponseModalSubmit(s, i, cli, data)
+	case strings.HasPrefix(data.CustomID, modalRunMessageAsIMMPrefix):
+		HandleRunMessageAsIMMModalSubmit(s, i, runner, data)
+	case strings.HasPrefix(data.CustomID, modalRegisterMessageIMMPrefix):
+		HandleRegisterMessageAsIMMModalSubmit(s, i, cli, runner, data)
 	}
+}
 
+func handleRegisterAsResponseModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client.Client, data discordgo.ModalSubmitInteractionData) {
 	guildID := i.GuildID
-	messageID := strings.TrimPrefix(data.CustomID, "reg_resp:")
+	messageID := strings.TrimPrefix(data.CustomID, modalRegisterResponsePrefix)
 
-	// Get command name from modal
-	var commandName string
-	for _, component := range data.Components {
-		if actionRow, ok := component.(*discordgo.ActionsRow); ok {
-			for _, c := range actionRow.Components {
-				if input, ok := c.(*discordgo.TextInput); ok && input.CustomID == "command_name" {
-					commandName = input.Value
-				}
-			}
-		}
-	}
-
+	commandName := modalInputValue(data, "command_name")
 	if commandName == "" {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -128,4 +126,52 @@ func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, cli
 			Content: content,
 		},
 	})
+}
+
+func selectedResolvedMessage(data discordgo.ApplicationCommandInteractionData) *discordgo.Message {
+	if data.Resolved == nil || len(data.Resolved.Messages) == 0 {
+		return nil
+	}
+	for _, msg := range data.Resolved.Messages {
+		return msg
+	}
+	return nil
+}
+
+func modalInputValue(data discordgo.ModalSubmitInteractionData, customID string) string {
+	for _, component := range data.Components {
+		actionRow, ok := asActionsRow(component)
+		if !ok {
+			continue
+		}
+		for _, c := range actionRow.Components {
+			input, ok := asTextInput(c)
+			if ok && input.CustomID == customID {
+				return strings.TrimSpace(input.Value)
+			}
+		}
+	}
+	return ""
+}
+
+func asActionsRow(component discordgo.MessageComponent) (*discordgo.ActionsRow, bool) {
+	switch v := component.(type) {
+	case *discordgo.ActionsRow:
+		return v, true
+	case discordgo.ActionsRow:
+		return &v, true
+	default:
+		return nil, false
+	}
+}
+
+func asTextInput(component discordgo.MessageComponent) (*discordgo.TextInput, bool) {
+	switch v := component.(type) {
+	case *discordgo.TextInput:
+		return v, true
+	case discordgo.TextInput:
+		return &v, true
+	default:
+		return nil, false
+	}
 }

@@ -256,11 +256,13 @@ func (b *Bot) handleApplicationCommand(s *discordgo.Session, i *discordgo.Intera
 		commands.HandleImm(s, i, b.client, b.immRunner)
 	case "Register as Response":
 		commands.HandleRegisterAsResponse(s, i)
+	case "Register as IMM":
+		commands.HandleRegisterMessageAsIMM(s, i, b.immRunner)
 	case "Run as IMM":
 		commands.HandleRunMessageAsIMM(s, i, b.immRunner)
 	}
 }
 
 func (b *Bot) handleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	commands.HandleModalSubmit(s, i, b.client)
+	commands.HandleModalSubmit(s, i, b.client, b.immRunner)
 }
