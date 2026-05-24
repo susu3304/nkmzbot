@@ -284,7 +284,7 @@ func (b *Bot) handleApplicationCommand(s *discordgo.Session, i *discordgo.Intera
 	case "wallet":
 		commands.HandleWallet(s, i, b.client)
 	case "jikan":
-		commands.HandleJikan(s, i, b.nomikai, b.db, b.client)
+		commands.HandleJikan(s, i, b.nomikai, b.db, b.client, b.immRunner)
 	case "imm":
 		commands.HandleImm(s, i, b.client, b.immRunner)
 	case "Register as Response":

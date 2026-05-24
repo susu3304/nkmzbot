@@ -60,7 +60,7 @@ go build -o nkmzbot cmd/nkmzbot/main.go
 - `/imm command add|update|remove` - IMMカスタムコマンドを管理
 
 ### その他のコマンド
-- `/jikan` - スケジュール実行を管理
+- `/jikan` - スケジュール実行を管理（`!` 通常コマンドと `?` IMMコマンドも予約実行できます）
 - `/nomikai` - 飲み会割り勘セッションを操作
 - `/guess` - ジオゲッサーを開始・プレイ
 - `/wallet` - Wallet API を使って送金・請求を記録
@@ -76,7 +76,7 @@ Wallet API への呼び出しでは既存の `API_TOKEN` を使い、操作ユ�
 
 登録した通常コマンドは `!コマンド名` で呼び出せます。IMMコマンドは `?コマンド名 引数...` の形で呼び出し、引数を渡せます。IMM側では `bot_args`、`bot_raw`、`bot_user_id`、`bot_channel_id`、`bot_guild_id` を参照できます。
 
-IMM実行時はコマンド参照を最大3段まで展開します。引数が `!hello` や `?repeat a` のようなコマンド参照なら、実行前にその出力へ置き換えます。IMMソース内では `bot_command("!hello")` や `bot_command("?repeat a")` を使うと、指定コマンドの出力を文字列として埋め込めます。循環参照や4段目の展開はエラーになります。
+IMM実行時はコマンド参照を最大3段まで展開します。引数が `!hello` や `?repeat a` のようなコマンド参照なら、実行前にその出力へ置き換えます。IMMソース内では `bot_command("!hello")` や `bot_command("?repeat a")` を使うと、指定コマンドの出力を文字列として埋め込めます。循環参照や4段目の展開はエラーになります。`/jikan add` の `command` に `?repeat a 3` のように指定すると、予約時刻にIMMコマンドを実行します。
 
 メッセージ右クリックからは以下を使えます。
 
