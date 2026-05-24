@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"reflect"
 	"testing"
 	"time"
 )
@@ -33,5 +34,34 @@ func TestNextDailyOccurrenceSameTimeAdvancesOneDay(t *testing.T) {
 	got := nextDailyOccurrence(now, now)
 	if !got.Equal(want) {
 		t.Fatalf("nextDailyOccurrence() = %s, want %s", got, want)
+	}
+}
+
+func TestParseScheduledImmCommand(t *testing.T) {
+	got, ok, err := parseScheduledImmCommand(`?repeat marmot "two words" 3`)
+	if err != nil {
+		t.Fatalf("parseScheduledImmCommand() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("parseScheduledImmCommand() ok = false, want true")
+	}
+	if got.Name != "repeat" {
+		t.Fatalf("Name = %q, want repeat", got.Name)
+	}
+	if got.RawArgs != `marmot "two words" 3` {
+		t.Fatalf("RawArgs = %q, want quoted raw args", got.RawArgs)
+	}
+	if want := []string{"marmot", "two words", "3"}; !reflect.DeepEqual(got.Args, want) {
+		t.Fatalf("Args = %#v, want %#v", got.Args, want)
+	}
+}
+
+func TestParseScheduledImmCommandIgnoresTextCommand(t *testing.T) {
+	_, ok, err := parseScheduledImmCommand("!repeat marmot 3")
+	if err != nil {
+		t.Fatalf("parseScheduledImmCommand() error = %v", err)
+	}
+	if ok {
+		t.Fatal("parseScheduledImmCommand() ok = true, want false")
 	}
 }

@@ -83,10 +83,10 @@ func (b *Bot) Start() error {
 
 	// Restore scheduled tasks from database
 	ctx := context.Background()
-	if err := commands.RestoreScheduledTasks(ctx, b.session, b.nomikai, b.db, b.client); err != nil {
+	if err := commands.RestoreScheduledTasks(ctx, b.session, b.nomikai, b.db, b.client, b.immRunner); err != nil {
 		log.Printf("Warning: failed to restore scheduled tasks: %v", err)
 	}
-	b.schedulerCancel = commands.StartScheduledTaskPolling(b.session, b.nomikai, b.db, b.client, 0)
+	b.schedulerCancel = commands.StartScheduledTaskPolling(b.session, b.nomikai, b.db, b.client, b.immRunner, 0)
 
 	b.reminder.start()
 	return nil
