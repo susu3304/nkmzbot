@@ -76,7 +76,7 @@ Wallet API への呼び出しでは既存の `API_TOKEN` を使い、操作ユ�
 
 登録した通常コマンドは `!コマンド名` で呼び出せます。IMMコマンドは `?コマンド名 引数...` の形で呼び出し、引数を渡せます。IMM側では `bot_args`、`bot_raw`、`bot_user_id`、`bot_channel_id`、`bot_guild_id` を参照できます。
 
-IMM実行時はコマンド参照を最大3段まで展開します。引数が `!hello` や `?repeat a` のようなコマンド参照なら、実行前にその出力へ置き換えます。IMMソース内では `bot_command("!hello")` や `bot_command("?repeat a")` を使うと、指定コマンドの出力を文字列として埋め込めます。循環参照や4段目の展開はエラーになります。`/jikan add` の `command` に `?repeat a 3` のように指定すると、予約時刻にIMMコマンドを実行します。
+IMM実行時は `!` 通常コマンドと `?` IMMコマンドの参照を最大3段まで展開します。引数が `!hello` や `?repeat a` のようなコマンド参照なら、実行前にその出力へ置き換えます。`?outer (?inner a) b` のように括弧で囲んだ参照は先に実行され、結果が1つの引数として渡されます。自己再帰や循環参照も3段までは実行し、4段目の展開でエラーになります。IMMソース内では `bot_command("!hello")` または `bot_expand("?repeat a")` で指定コマンドの出力を文字列として埋め込めます。保存本文は `bot_command_body("!hello")`、メタ情報は `bot_command_info("?repeat")`、サーバー内一覧は `bot_commands("all")` / `bot_commands("text")` / `bot_commands("imm")` で参照できます。`/jikan add` の `command` に `?repeat a 3` のように指定すると、予約時刻にIMMコマンドを実行します。
 
 メッセージ右クリックからは以下を使えます。
 

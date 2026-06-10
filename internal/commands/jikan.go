@@ -482,7 +482,7 @@ func parseScheduledImmCommand(cmdStr string) (scheduledImmCommand, bool, error) 
 		return scheduledImmCommand{}, false, nil
 	}
 
-	args, err := imm.SplitArgs(rawArgs)
+	args, err := SplitExpansionArgs(rawArgs)
 	if err != nil {
 		return scheduledImmCommand{}, true, err
 	}

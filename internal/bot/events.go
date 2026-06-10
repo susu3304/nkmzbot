@@ -116,7 +116,7 @@ func (b *Bot) lookupMessageCommand(guildID, commandText, expectedKind string) (s
 	if !strings.EqualFold(expectedKind, immCommandKind) {
 		return name, cmd, "", nil, nil
 	}
-	args, err := imm.SplitArgs(rawArgs)
+	args, err := commands.SplitExpansionArgs(rawArgs)
 	if err != nil {
 		return "", nil, "", nil, err
 	}

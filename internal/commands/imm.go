@@ -319,7 +319,7 @@ func normalizeImmCommandName(name string) string {
 }
 
 func runImmInteraction(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client.Client, runner *imm.Runner, source, rawArgs string, trace bool) {
-	args, err := imm.SplitArgs(rawArgs)
+	args, err := SplitExpansionArgs(rawArgs)
 	if err != nil {
 		respondText(s, i, "argsの解釈に失敗しました: "+err.Error())
 		return

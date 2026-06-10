@@ -47,6 +47,11 @@ type commandLookupResult struct {
 	Found   bool
 }
 
+type expansionArg struct {
+	Value      string
+	Expandable bool
+}
+
 func (e CommandExpander) ExpandRequest(ctx context.Context, execCtx CommandExecutionContext, source, rawArgs string, args []string) (ExpandedRequest, error) {
 	return e.expandRequestAtDepth(ctx, execCtx, source, rawArgs, args, 0, append([]string(nil), e.Stack...))
 }
@@ -56,7 +61,11 @@ func (e CommandExpander) expandRequestAtDepth(ctx context.Context, execCtx Comma
 	if err != nil {
 		return ExpandedRequest{}, err
 	}
-	expandedArgs, err := e.expandArgs(ctx, execCtx, args, depth, stack)
+	argTokens, err := expansionArgs(rawArgs, args)
+	if err != nil {
+		return ExpandedRequest{}, err
+	}
+	expandedArgs, err := e.expandArgs(ctx, execCtx, argTokens, depth, stack)
 	if err != nil {
 		return ExpandedRequest{}, err
 	}
@@ -66,10 +75,16 @@ func (e CommandExpander) expandRequestAtDepth(ctx context.Context, execCtx Comma
 	return ExpandedRequest{Source: expandedSource, Args: expandedArgs, RawArgs: rawArgs}, nil
 }
 
-func (e CommandExpander) expandArgs(ctx context.Context, execCtx CommandExecutionContext, args []string, depth int, stack []string) ([]string, error) {
+func (e CommandExpander) expandArgs(ctx context.Context, execCtx CommandExecutionContext, args []expansionArg, depth int, stack []string) ([]string, error) {
 	expanded := make([]string, 0, len(args))
 	for _, arg := range args {
-		value, err := e.expandValue(ctx, execCtx, arg, depth, stack, false)
+		value := arg.Value
+		if !arg.Expandable {
+			expanded = append(expanded, value)
+			continue
+		}
+		var err error
+		value, err = e.expandValue(ctx, execCtx, value, depth, stack, false)
 		if err != nil {
 			return nil, err
 		}
@@ -79,7 +94,7 @@ func (e CommandExpander) expandArgs(ctx context.Context, execCtx CommandExecutio
 }
 
 func (e CommandExpander) expandValue(ctx context.Context, execCtx CommandExecutionContext, value string, depth int, stack []string, required bool) (string, error) {
-	ref, ok := parseCommandReference(value)
+	ref, expression, ok := parseExpandableCommandReference(value)
 	if !ok {
 		return value, nil
 	}
@@ -88,7 +103,7 @@ func (e CommandExpander) expandValue(ctx context.Context, execCtx CommandExecuti
 		return "", err
 	}
 	if !found {
-		if required {
+		if required || expression {
 			return "", fmt.Errorf("command reference %q was not found", strings.TrimSpace(value))
 		}
 		return value, nil
@@ -109,8 +124,52 @@ func (e CommandExpander) expandSource(ctx context.Context, execCtx CommandExecut
 		case strings.HasPrefix(source[i:], "/*"):
 			next := copyBlockComment(&out, source, i)
 			i = next
+		case hasFunctionNameAt(source, i, "bot_command_body"):
+			ref, next, err := parseBotStringCall(source, i, "bot_command_body")
+			if err != nil {
+				return "", err
+			}
+			body, err := e.commandBody(execCtx, ref)
+			if err != nil {
+				return "", err
+			}
+			out.WriteString(strconv.Quote(body))
+			i = next
+		case hasFunctionNameAt(source, i, "bot_command_info"):
+			ref, next, err := parseBotStringCall(source, i, "bot_command_info")
+			if err != nil {
+				return "", err
+			}
+			literal, err := e.commandInfoLiteral(execCtx, ref)
+			if err != nil {
+				return "", err
+			}
+			out.WriteString(literal)
+			i = next
+		case hasFunctionNameAt(source, i, "bot_commands"):
+			filter, next, err := parseBotOptionalStringCall(source, i, "bot_commands", "all")
+			if err != nil {
+				return "", err
+			}
+			literal, err := e.commandsLiteral(execCtx, filter)
+			if err != nil {
+				return "", err
+			}
+			out.WriteString(literal)
+			i = next
+		case hasFunctionNameAt(source, i, "bot_expand"):
+			ref, next, err := parseBotStringCall(source, i, "bot_expand")
+			if err != nil {
+				return "", err
+			}
+			output, err := e.expandValue(ctx, execCtx, ref, depth, stack, true)
+			if err != nil {
+				return "", err
+			}
+			out.WriteString(strconv.Quote(output))
+			i = next
 		case hasFunctionNameAt(source, i, "bot_command"):
-			ref, next, err := parseBotCommandCall(source, i, "bot_command")
+			ref, next, err := parseBotStringCall(source, i, "bot_command")
 			if err != nil {
 				return "", err
 			}
@@ -134,13 +193,11 @@ func (e CommandExpander) resolveReference(ctx context.Context, execCtx CommandEx
 		return "", lookup.Found, stack, err
 	}
 	if depth >= e.maxDepth() {
-		return "", true, stack, fmt.Errorf("command expansion exceeded max depth %d at %s%s", e.maxDepth(), ref.Prefix, lookup.Name)
+		key := ref.Prefix + lookup.Name
+		return "", true, stack, fmt.Errorf("command expansion depth exceeded: %s", strings.Join(append(stack, key), " -> "))
 	}
 
 	key := ref.Prefix + lookup.Name
-	if containsString(stack, key) {
-		return "", true, stack, fmt.Errorf("command expansion loop detected: %s", strings.Join(append(stack, key), " -> "))
-	}
 	nextStack := append(append([]string(nil), stack...), key)
 
 	if strings.EqualFold(commandKind(lookup.Command.Kind), "imm") {
@@ -195,7 +252,7 @@ func (e CommandExpander) lookupReference(guildID string, ref commandReference) (
 	if !commandMatchesReference(cmd, ref.Kind) {
 		return commandLookupResult{}, nil
 	}
-	args, err := imm.SplitArgs(rawArgs)
+	args, err := SplitExpansionArgs(rawArgs)
 	if err != nil {
 		return commandLookupResult{}, err
 	}
@@ -232,6 +289,69 @@ func parseCommandReference(value string) (commandReference, bool) {
 	}
 }
 
+func parseExpandableCommandReference(value string) (commandReference, bool, bool) {
+	ref, ok := parseCommandReference(value)
+	if ok {
+		return ref, false, true
+	}
+	ref, ok = parseParenthesizedCommandReference(value)
+	if ok {
+		return ref, true, true
+	}
+	return commandReference{}, false, false
+}
+
+func parseParenthesizedCommandReference(value string) (commandReference, bool) {
+	value = strings.TrimSpace(value)
+	if len(value) < 4 || value[0] != '(' || value[len(value)-1] != ')' {
+		return commandReference{}, false
+	}
+	if !isSingleParenthesizedExpression(value) {
+		return commandReference{}, false
+	}
+	return parseCommandReference(strings.TrimSpace(value[1 : len(value)-1]))
+}
+
+func isSingleParenthesizedExpression(value string) bool {
+	depth := 0
+	var quote rune
+	escaped := false
+
+	for i, r := range value {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if r == '\\' {
+			escaped = true
+			continue
+		}
+		if quote != 0 {
+			if r == quote {
+				quote = 0
+			}
+			continue
+		}
+		if r == '"' || r == '\'' {
+			quote = r
+			continue
+		}
+		switch r {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth < 0 {
+				return false
+			}
+			if depth == 0 && i != len(value)-1 {
+				return false
+			}
+		}
+	}
+	return depth == 0 && quote == 0
+}
+
 func commandMatchesReference(cmd *client.BotCommandResponse, kind string) bool {
 	if cmd == nil {
 		return false
@@ -245,6 +365,103 @@ func commandKind(kind string) string {
 		return "text"
 	}
 	return kind
+}
+
+func (e CommandExpander) commandBody(execCtx CommandExecutionContext, refText string) (string, error) {
+	ref, ok := parseCommandReference(refText)
+	if !ok {
+		return "", fmt.Errorf("command reference %q is invalid", strings.TrimSpace(refText))
+	}
+	lookup, err := e.lookupReference(execCtx.GuildID, ref)
+	if err != nil {
+		return "", err
+	}
+	if !lookup.Found {
+		return "", fmt.Errorf("command reference %q was not found", strings.TrimSpace(refText))
+	}
+	return lookup.Command.Response, nil
+}
+
+func (e CommandExpander) commandInfoLiteral(execCtx CommandExecutionContext, refText string) (string, error) {
+	ref, ok := parseCommandReference(refText)
+	if !ok {
+		return "", fmt.Errorf("command reference %q is invalid", strings.TrimSpace(refText))
+	}
+	lookup, err := e.lookupReference(execCtx.GuildID, ref)
+	if err != nil {
+		return "", err
+	}
+	if !lookup.Found {
+		return "", fmt.Errorf("command reference %q was not found", strings.TrimSpace(refText))
+	}
+	return commandRecordLiteral(client.CommandRecord{
+		Name:     lookup.Name,
+		Kind:     commandKind(lookup.Command.Kind),
+		Response: lookup.Command.Response,
+	}), nil
+}
+
+func (e CommandExpander) commandsLiteral(execCtx CommandExecutionContext, filter string) (string, error) {
+	filter, err := normalizeCommandFilter(filter)
+	if err != nil {
+		return "", err
+	}
+	if e.Client == nil || strings.TrimSpace(execCtx.GuildID) == "" {
+		return "[]", nil
+	}
+	commands, err := e.Client.ListCommands(execCtx.GuildID)
+	if err != nil {
+		return "", err
+	}
+
+	parts := make([]string, 0, len(commands))
+	for _, cmd := range commands {
+		kind := commandKind(cmd.Kind)
+		if filter != "all" && !strings.EqualFold(kind, filter) {
+			continue
+		}
+		cmd.Kind = kind
+		parts = append(parts, commandRecordLiteral(cmd))
+	}
+	return "[" + strings.Join(parts, ", ") + "]", nil
+}
+
+func normalizeCommandFilter(filter string) (string, error) {
+	filter = strings.ToLower(strings.TrimSpace(filter))
+	switch filter {
+	case "", "all", "any":
+		return "all", nil
+	case "text", "imm":
+		return filter, nil
+	default:
+		return "", fmt.Errorf("bot_commands filter must be \"all\", \"text\", or \"imm\"")
+	}
+}
+
+func commandRecordLiteral(cmd client.CommandRecord) string {
+	kind := commandKind(cmd.Kind)
+	prefix := "!"
+	if strings.EqualFold(kind, "imm") {
+		prefix = "?"
+	}
+	return "{" +
+		`"name": ` + strconv.Quote(cmd.Name) + ", " +
+		`"prefix": ` + strconv.Quote(prefix) + ", " +
+		`"kind": ` + strconv.Quote(kind) + ", " +
+		`"body": ` + strconv.Quote(cmd.Response) + ", " +
+		`"tags": ` + stringArrayLiteral(cmd.Tags) +
+		"}"
+}
+
+func stringArrayLiteral(values []string) string {
+	if len(values) == 0 {
+		return "[]"
+	}
+	parts := make([]string, 0, len(values))
+	for _, value := range values {
+		parts = append(parts, strconv.Quote(value))
+	}
+	return "[" + strings.Join(parts, ", ") + "]"
 }
 
 func splitCommandReferenceText(commandText string) (string, string) {
@@ -268,6 +485,152 @@ func joinRawArgs(args []string) string {
 	return strings.Join(parts, " ")
 }
 
+func expansionArgs(rawArgs string, args []string) ([]expansionArg, error) {
+	if strings.TrimSpace(rawArgs) != "" {
+		return parseExpansionArgs(rawArgs)
+	}
+	tokens := make([]expansionArg, 0, len(args))
+	for _, arg := range args {
+		tokens = append(tokens, expansionArg{Value: arg, Expandable: true})
+	}
+	return tokens, nil
+}
+
+func SplitExpansionArgs(input string) ([]string, error) {
+	tokens, err := parseExpansionArgs(input)
+	if err != nil {
+		return nil, err
+	}
+	args := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		args = append(args, token.Value)
+	}
+	return args, nil
+}
+
+func parseExpansionArgs(input string) ([]expansionArg, error) {
+	var args []expansionArg
+	var current strings.Builder
+	var quote rune
+	escaped := false
+	groupEscaped := false
+	inToken := false
+	tokenExpandable := false
+	groupDepth := 0
+
+	flush := func() {
+		if !inToken {
+			return
+		}
+		args = append(args, expansionArg{Value: current.String(), Expandable: tokenExpandable})
+		current.Reset()
+		inToken = false
+		tokenExpandable = false
+	}
+
+	for i, r := range input {
+		if groupDepth > 0 {
+			current.WriteRune(r)
+			inToken = true
+			tokenExpandable = true
+			if groupEscaped {
+				groupEscaped = false
+				continue
+			}
+			if r == '\\' {
+				groupEscaped = true
+				continue
+			}
+			if quote != 0 {
+				if r == quote {
+					quote = 0
+				}
+				continue
+			}
+			if r == '"' || r == '\'' {
+				quote = r
+				continue
+			}
+			if r == '(' {
+				groupDepth++
+			}
+			if r == ')' {
+				groupDepth--
+			}
+			continue
+		}
+		if quote != 0 {
+			if escaped {
+				current.WriteRune(r)
+				escaped = false
+				continue
+			}
+			if r == '\\' {
+				escaped = true
+				continue
+			}
+			if r == quote {
+				quote = 0
+				continue
+			}
+			current.WriteRune(r)
+			continue
+		}
+		if escaped {
+			current.WriteRune(r)
+			escaped = false
+			inToken = true
+			tokenExpandable = true
+			continue
+		}
+		if r == '\\' {
+			escaped = true
+			inToken = true
+			tokenExpandable = true
+			continue
+		}
+		if r == '"' || r == '\'' {
+			quote = r
+			inToken = true
+			continue
+		}
+		if unicode.IsSpace(r) {
+			flush()
+			continue
+		}
+		if r == '(' && !inToken && beginsCommandExpressionAt(input, i) {
+			groupDepth = 1
+			current.WriteRune(r)
+			inToken = true
+			tokenExpandable = true
+			continue
+		}
+		current.WriteRune(r)
+		inToken = true
+		tokenExpandable = true
+	}
+
+	if escaped {
+		current.WriteRune('\\')
+	}
+	if quote != 0 {
+		return nil, fmt.Errorf("unterminated quote")
+	}
+	if groupDepth != 0 {
+		return nil, fmt.Errorf("unterminated command expression")
+	}
+	flush()
+	return args, nil
+}
+
+func beginsCommandExpressionAt(input string, index int) bool {
+	if index >= len(input) || input[index] != '(' {
+		return false
+	}
+	i := skipSpaces(input, index+1)
+	return i < len(input) && (input[i] == '!' || input[i] == '?')
+}
+
 func hasFunctionNameAt(source string, index int, name string) bool {
 	if !strings.HasPrefix(source[index:], name) {
 		return false
@@ -282,7 +645,7 @@ func hasFunctionNameAt(source string, index int, name string) bool {
 	return true
 }
 
-func parseBotCommandCall(source string, index int, name string) (string, int, error) {
+func parseBotStringCall(source string, index int, name string) (string, int, error) {
 	i := index + len(name)
 	i = skipSpaces(source, i)
 	if i >= len(source) || source[i] != '(' {
@@ -301,9 +664,31 @@ func parseBotCommandCall(source string, index int, name string) (string, int, er
 	return value, next + 1, nil
 }
 
+func parseBotOptionalStringCall(source string, index int, name, defaultValue string) (string, int, error) {
+	i := index + len(name)
+	i = skipSpaces(source, i)
+	if i >= len(source) || source[i] != '(' {
+		return "", index, fmt.Errorf("%s must be called as %s(\"all\")", name, name)
+	}
+	i++
+	i = skipSpaces(source, i)
+	if i < len(source) && source[i] == ')' {
+		return defaultValue, i + 1, nil
+	}
+	value, next, err := parseStringLiteral(source, i)
+	if err != nil {
+		return "", index, err
+	}
+	next = skipSpaces(source, next)
+	if next >= len(source) || source[next] != ')' {
+		return "", index, fmt.Errorf("%s call must close with )", name)
+	}
+	return value, next + 1, nil
+}
+
 func parseStringLiteral(source string, index int) (string, int, error) {
 	if index >= len(source) || (source[index] != '"' && source[index] != '\'') {
-		return "", index, fmt.Errorf("bot_command expects a string literal")
+		return "", index, fmt.Errorf("bot API call expects a string literal")
 	}
 	quote := source[index]
 	var value strings.Builder
@@ -375,13 +760,4 @@ func copyBlockComment(out *strings.Builder, source string, index int) int {
 
 func isIdentifierRune(r rune) bool {
 	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
-}
-
-func containsString(values []string, target string) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
-	}
-	return false
 }
