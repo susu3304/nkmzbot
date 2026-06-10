@@ -11,10 +11,6 @@ import (
 )
 
 func HandleImm(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client.Client, runner *imm.Runner) {
-	if runner == nil {
-		respondText(s, i, "IMM runner is not configured.")
-		return
-	}
 	data := i.ApplicationCommandData()
 	if len(data.Options) == 0 {
 		respondText(s, i, "サブコマンドが指定されていません。")
@@ -24,10 +20,18 @@ func HandleImm(s *discordgo.Session, i *discordgo.InteractionCreate, cli *client
 	top := data.Options[0]
 	switch top.Name {
 	case "run":
+		if runner == nil {
+			respondText(s, i, "IMM runner is not configured.")
+			return
+		}
 		source := stringOptionValue(top.Options, "source")
 		rawArgs := stringOptionValue(top.Options, "args")
 		runImmInteraction(s, i, cli, runner, source, rawArgs, false)
 	case "check":
+		if runner == nil {
+			respondText(s, i, "IMM runner is not configured.")
+			return
+		}
 		source := stringOptionValue(top.Options, "source")
 		checkImmInteraction(s, i, cli, runner, source)
 	case "command":
@@ -218,6 +222,10 @@ func handleImmCommandGroup(s *discordgo.Session, i *discordgo.InteractionCreate,
 	sub := group.Options[0]
 	switch sub.Name {
 	case "add", "update":
+		if runner == nil {
+			respondText(s, i, "IMM runner is not configured.")
+			return
+		}
 		name := normalizeImmCommandName(stringOptionValue(sub.Options, "name"))
 		source := stringOptionValue(sub.Options, "source")
 		tags := parseTags(stringOptionValue(sub.Options, "tags"))
@@ -281,6 +289,26 @@ func handleImmCommandGroup(s *discordgo.Session, i *discordgo.InteractionCreate,
 			return
 		}
 		respondText(s, i, fmt.Sprintf("IMMコマンド `?%s` を削除しました。", name))
+	case "show":
+		name := normalizeImmCommandName(stringOptionValue(sub.Options, "name"))
+		if name == "" {
+			respondText(s, i, "nameが必要です。")
+			return
+		}
+		cmd, err := cli.GetCommand(i.GuildID, name)
+		if err != nil {
+			if client.IsConnectionError(err) {
+				respondText(s, i, apiConnectionErrorMessage)
+			} else {
+				respondText(s, i, "IMMコマンドの取得に失敗しました。")
+			}
+			return
+		}
+		if cmd == nil || !strings.EqualFold(commandKind(cmd.Kind), "imm") {
+			respondText(s, i, fmt.Sprintf("IMMコマンド `?%s` は見つかりません。", name))
+			return
+		}
+		respondText(s, i, formatImmCommandSource(name, cmd.Response))
 	default:
 		respondText(s, i, "未知のIMM commandサブコマンドです。")
 	}
@@ -431,16 +459,66 @@ func FormatImmFailure(prefix string, result imm.Result) string {
 	return truncateDiscordMessage(prefix + "\n```text\n" + truncateForCodeBlock(detail) + "\n```")
 }
 
+func formatImmCommandSource(name, source string) string {
+	name = normalizeImmCommandName(name)
+	source = strings.TrimRight(source, "\r\n")
+	if source == "" {
+		source = "(empty)"
+	}
+	header := fmt.Sprintf("IMMコマンド `?%s` の中身:\n", name)
+	return formatBoundedCodeBlock(header, "imm", source)
+}
+
+func formatBoundedCodeBlock(header, language, content string) string {
+	content = escapeDiscordCodeFence(content)
+	prefix := header + "```" + language + "\n"
+	suffix := "\n```"
+	available := discordMessageLimit - runeLen(prefix) - runeLen(suffix)
+	if available <= 0 {
+		return truncateDiscordMessage(header)
+	}
+	if runeLen(content) <= available {
+		return prefix + content + suffix
+	}
+	notice := "\n...(truncated)"
+	available -= runeLen(notice)
+	if available < 0 {
+		available = 0
+	}
+	return prefix + firstRunes(content, available) + notice + suffix
+}
+
 func truncateDiscordMessage(content string) string {
-	const limit = 1900
-	if len([]rune(content)) <= limit {
+	if runeLen(content) <= discordMessageLimit {
 		return content
 	}
-	runes := []rune(content)
-	return string(runes[:limit]) + "\n...(truncated)"
+	notice := "\n...(truncated)"
+	available := discordMessageLimit - runeLen(notice)
+	if available < 0 {
+		available = 0
+	}
+	return firstRunes(content, available) + notice
 }
 
 func truncateForCodeBlock(content string) string {
-	content = strings.ReplaceAll(content, "```", "`\u200b``")
+	content = escapeDiscordCodeFence(content)
 	return truncateDiscordMessage(content)
+}
+
+const discordMessageLimit = 2000
+
+func escapeDiscordCodeFence(content string) string {
+	return strings.ReplaceAll(content, "```", "`\u200b``")
+}
+
+func runeLen(content string) int {
+	return len([]rune(content))
+}
+
+func firstRunes(content string, limit int) string {
+	runes := []rune(content)
+	if len(runes) <= limit {
+		return content
+	}
+	return string(runes[:limit])
 }

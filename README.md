@@ -57,7 +57,7 @@ go build -o nkmzbot cmd/nkmzbot/main.go
 - `/ramdom` - 登録されている通常コマンドからランダムに1つ返答（IMMコマンドは対象外）
 - `/imm run` - IMMコードをその場で実行
 - `/imm check` - IMMコードを構文チェック
-- `/imm command add|update|remove` - IMMカスタムコマンドを管理
+- `/imm command add|update|remove|show` - IMMカスタムコマンドを管理し、`show` で `?` コマンドのIMMソースを表示
 
 ### その他のコマンド
 - `/jikan` - スケジュール実行を管理（`!` 通常コマンドと `?` IMMコマンドも予約実行できます）

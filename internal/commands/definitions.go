@@ -114,6 +114,19 @@ func GetCommands() []*discordgo.ApplicationCommand {
 								},
 							},
 						},
+						{
+							Type:        discordgo.ApplicationCommandOptionSubCommand,
+							Name:        "show",
+							Description: "IMMカスタムコマンドのソースを表示します",
+							Options: []*discordgo.ApplicationCommandOption{
+								{
+									Type:        discordgo.ApplicationCommandOptionString,
+									Name:        "name",
+									Description: "表示するコマンド名（?は不要）",
+									Required:    true,
+								},
+							},
+						},
 					},
 				},
 			},

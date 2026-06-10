@@ -289,6 +289,7 @@ func respondSimple(s *discordgo.Session, i *discordgo.InteractionCreate, err err
 }
 
 func respondText(s *discordgo.Session, i *discordgo.InteractionCreate, content string) {
+	content = truncateDiscordMessage(content)
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{Content: content},
